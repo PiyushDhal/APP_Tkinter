@@ -80,7 +80,7 @@ class DatabaseManager:
         return conn
 
     def init_database(self):
-        """Creates the expenses table and automatically seeds realistic demo data if empty."""
+        """Creates the expenses table if it does not exist. Starts clean with zero initial records."""
         try:
             conn = self.get_connection()
             try:
@@ -97,10 +97,6 @@ class DatabaseManager:
                             date_added TEXT NOT NULL
                         )
                     """)
-                    cursor.execute("SELECT COUNT(*) AS cnt FROM expenses")
-                    row = cursor.fetchone()
-                    if row and row["cnt"] == 0:
-                        self.seed_demo_data(cursor)
             finally:
                 conn.close()
         except sqlite3.Error as err:
@@ -1084,7 +1080,7 @@ class CampusExpenseApp(tk.Tk):
         # Left: Live status label
         self.status_lbl = tk.Label(
             bar,
-            text="Ready. Select an expense to inspect or delete. Press Ctrl+S for Settle-Up.",
+            text="Ready. Enter an expense above to get started. Press Ctrl+S for Settle-Up.",
             font=("Segoe UI", 9),
             fg="#475569",
             bg="#FFFFFF"

@@ -7,7 +7,7 @@ A presentation-ready, high-contrast desktop application built in Python using **
 ## 🌟 Key Presentation Features
 
 - **Self-Contained & Zero Setup:** Runs out of the box on standard Python 3.x installations without external dependencies or cloud databases. SQLite database (`campus_expenses.db`) is automatically created and initialized locally.
-- **Demo Readiness:** On first launch, the database automatically pre-seeds 4 realistic student expenses (cafeteria lunch, cab fare, lab xerox, hostel snacks) so the UI appears fully populated and presentation-ready.
+- **Zero-Data Start & Dynamic Input:** Starts completely clean with zero initial records. The database, live dashboard KPIs, table, and Settle-Up calculations dynamically update in real time as the user logs expenses.
 - **Presentation-Grade Modern UI:**
   - Styled with the modern `ttk` `'clam'` theme.
   - Windows High-DPI awareness enabled for razor-sharp typography and crisp borders on classroom projectors and 4K displays.
