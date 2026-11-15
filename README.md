@@ -36,7 +36,7 @@ A presentation-ready, high-contrast desktop application built in Python using **
   - **Optimal "Who Owes Whom" Plan:** Uses the greedy Min-Cash-Flow algorithm to resolve all debts in the absolute minimum number of peer-to-peer transfers.
   - One-click **"Copy to Clipboard"** for instant pasting into WhatsApp / group chats.
   - Save full settlement report to a formatted `.txt` file.
-- **CSV Data Export:** One-click export to `expenses_report.csv` preserving active category/search filter views with summary row.
+- **CSV Data Export & One-Click Wipe:** One-click export to `expenses_report.csv` preserving active category/search filter views with summary row, plus a built-in **"🧹 Erase All Data"** button with confirmation dialog to instantly reset the system back to clean zero at any time.
 
 ---
 

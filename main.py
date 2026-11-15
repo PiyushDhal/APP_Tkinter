@@ -134,6 +134,21 @@ class DatabaseManager:
         finally:
             conn.close()
 
+    def clear_all_expenses(self):
+        """Wipes all records and resets autoincrement ID back to zero."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM expenses")
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name='expenses'")
+                return True
+        except sqlite3.Error as err:
+            print(f"Database Clear All Error: {err}", file=sys.stderr)
+            return False
+        finally:
+            conn.close()
+
     def get_expenses(self, category_filter="All", search_query=""):
         """Fetches expenses filtered by category and search keyword (item or paid_by)."""
         query = "SELECT * FROM expenses WHERE 1=1"
@@ -1079,7 +1094,10 @@ class CampusExpenseApp(tk.Tk):
         export_btn.pack(side=tk.RIGHT, padx=6)
 
         del_btn = ttk.Button(bar, text="🗑️ Delete Selected", style="Danger.TButton", command=self.on_delete_selected)
-        del_btn.pack(side=tk.RIGHT)
+        del_btn.pack(side=tk.RIGHT, padx=6)
+
+        reset_btn = ttk.Button(bar, text="🧹 Erase All Data", style="Secondary.TButton", command=self.on_reset_all_data)
+        reset_btn.pack(side=tk.RIGHT)
 
     # ==========================================================================
     # LOGIC & EVENT HANDLERS
@@ -1262,6 +1280,31 @@ class CampusExpenseApp(tk.Tk):
                 self.status_lbl.configure(text=f"✓ Deleted expense #{item_id}: '{item_name}'")
             else:
                 messagebox.showerror("Error", "Could not delete the selected record from the database.")
+
+    def on_reset_all_data(self):
+        """Prompts confirmation and clears all expenses from the database."""
+        count = self.db.get_summary_metrics()["total_count"]
+        if count == 0:
+            messagebox.showinfo("Already Empty", "There are no expenses to erase. The database is already clean.")
+            return
+
+        confirm = messagebox.askyesno(
+            "Confirm Erase All Data",
+            f"Are you sure you want to delete ALL {count} expense record(s)?\n\n"
+            f"This will wipe all data and reset the system back to zero.\n"
+            f"This action cannot be undone.",
+            icon="warning"
+        )
+
+        if confirm:
+            if self.db.clear_all_expenses():
+                self.load_expenses()
+                self.update_summary_kpis()
+                self.refresh_payer_autocomplete()
+                self.status_lbl.configure(text="✓ All data erased. Ready for clean input.")
+                messagebox.showinfo("Data Erased", "All expense records have been wiped clean.")
+            else:
+                messagebox.showerror("Error", "Could not clear records from the database.")
 
     def on_row_double_click(self, event):
         """Shows detailed information when double clicking a row."""
