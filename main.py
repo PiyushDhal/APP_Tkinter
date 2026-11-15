@@ -1,6 +1,6 @@
 """
-Campus Expense & Split Tracker
-==============================
+No Guilt — Campus Expense & Split Tracker
+=========================================
 A presentation-ready desktop application built with Python, Tkinter (ttk), and SQLite3.
 Designed for college students, flatmates, and campus project groups to log joint expenses,
 track category spending, calculate per-person splits, and resolve group debts with minimal
@@ -17,7 +17,7 @@ Key Features:
 - Settle-Up modal with exact paise arithmetic, individual net balances, and minimal transactions.
 - CSV report export ('expenses_report.csv') supporting both filtered and full views.
 
-Author: Campus Expense Tracker Team
+Author: No Guilt Team
 """
 
 import sys
@@ -338,7 +338,7 @@ class SettleUpDialog(tk.Toplevel):
         super().__init__(parent)
         self.parent = parent
         self.db = db_manager
-        self.title("🤝 Group Settle Up Summary — Campus Expense Tracker")
+        self.title("🤝 Group Settle Up Summary — No Guilt")
         self.geometry("760x560")
         self.minsize(660, 460)
         self.configure(bg="#F8FAFC")
@@ -388,6 +388,58 @@ class SettleUpDialog(tk.Toplevel):
             bg="#1E293B"
         )
         subtitle_lbl.pack(anchor="w", pady=(1, 0))
+
+        # Bottom Button Bar (packed first to guarantee it is anchored at the bottom)
+        btn_bar = tk.Frame(self, bg="#E2E8F0", padx=14, pady=8)
+        btn_bar.pack(fill=tk.X, side=tk.BOTTOM)
+
+        copy_btn = tk.Button(
+            btn_bar,
+            text="📋 Copy Settlement to Clipboard",
+            font=("Segoe UI", 9, "bold"),
+            bg="#2563EB",
+            fg="#FFFFFF",
+            activebackground="#1D4ED8",
+            activeforeground="#FFFFFF",
+            relief="flat",
+            padx=10,
+            pady=4,
+            cursor="hand2",
+            command=self.copy_to_clipboard
+        )
+        copy_btn.pack(side=tk.LEFT)
+
+        export_txt_btn = tk.Button(
+            btn_bar,
+            text="💾 Save Report (.txt)",
+            font=("Segoe UI", 9),
+            bg="#FFFFFF",
+            fg="#1E293B",
+            activebackground="#F1F5F9",
+            relief="solid",
+            bd=1,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=self.save_txt_report
+        )
+        export_txt_btn.pack(side=tk.LEFT, padx=8)
+
+        close_btn = tk.Button(
+            btn_bar,
+            text="Close",
+            font=("Segoe UI", 9),
+            bg="#FFFFFF",
+            fg="#1E293B",
+            activebackground="#F1F5F9",
+            relief="solid",
+            bd=1,
+            padx=14,
+            pady=4,
+            cursor="hand2",
+            command=self.destroy
+        )
+        close_btn.pack(side=tk.RIGHT)
 
         # Main content container
         content_frame = tk.Frame(self, bg="#F8FAFC", padx=16, pady=10)
@@ -536,63 +588,12 @@ class SettleUpDialog(tk.Toplevel):
                 amt_lbl = tk.Label(row_f, text=f"₹ {tx['amount']:,.2f}", font=("Segoe UI", 9, "bold"), fg="#1E3A8A", bg="#F8FAFC")
                 amt_lbl.pack(side=tk.RIGHT)
 
-        # Bottom Button Bar
-        btn_bar = tk.Frame(self, bg="#E2E8F0", padx=14, pady=8)
-        btn_bar.pack(fill=tk.X, side=tk.BOTTOM)
-
-        copy_btn = tk.Button(
-            btn_bar,
-            text="📋 Copy Settlement to Clipboard",
-            font=("Segoe UI", 9, "bold"),
-            bg="#2563EB",
-            fg="#FFFFFF",
-            activebackground="#1D4ED8",
-            activeforeground="#FFFFFF",
-            relief="flat",
-            padx=10,
-            pady=4,
-            cursor="hand2",
-            command=self.copy_to_clipboard
-        )
-        copy_btn.pack(side=tk.LEFT)
-
-        export_txt_btn = tk.Button(
-            btn_bar,
-            text="💾 Save Report (.txt)",
-            font=("Segoe UI", 9),
-            bg="#FFFFFF",
-            fg="#1E293B",
-            activebackground="#F1F5F9",
-            relief="solid",
-            bd=1,
-            padx=8,
-            pady=4,
-            cursor="hand2",
-            command=self.save_txt_report
-        )
-        export_txt_btn.pack(side=tk.LEFT, padx=8)
-
-        close_btn = tk.Button(
-            btn_bar,
-            text="Close",
-            font=("Segoe UI", 9),
-            bg="#FFFFFF",
-            fg="#1E293B",
-            activebackground="#F1F5F9",
-            relief="solid",
-            bd=1,
-            padx=14,
-            pady=4,
-            cursor="hand2",
-            command=self.destroy
-        )
-        close_btn.pack(side=tk.RIGHT)
-
+        # Report formatting
     def generate_report_text(self):
         """Builds a formatted text representation for clipboard or file export."""
         lines = []
         lines.append("=" * 64)
-        lines.append("       CAMPUS EXPENSE TRACKER - GROUP SETTLEMENT REPORT")
+        lines.append("           NO GUILT - GROUP SETTLEMENT REPORT")
         lines.append(f"       Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 64)
         lines.append(f"Total Group Spend:  ₹ {self.total_spend:,.2f}")
@@ -655,7 +656,7 @@ class CampusExpenseApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Campus Expense & Split Tracker")
+        self.title("No Guilt — Campus Expense & Split Tracker")
         self.geometry("1000x650")
         self.minsize(850, 550)
         self.configure(bg="#F1F5F9")
@@ -891,10 +892,10 @@ class CampusExpenseApp(tk.Tk):
         hero.pack(fill=tk.X, padx=20, pady=(16, 10))
 
         tk.Label(hero, text="🎓", font=("Segoe UI", 26), fg="#FFFFFF", bg="#0F172A").pack(anchor="center")
-        tk.Label(hero, text="Campus Expense & Split Tracker", font=("Segoe UI", 18, "bold"), fg="#FFFFFF", bg="#0F172A").pack(anchor="center", pady=(1, 2))
+        tk.Label(hero, text="No Guilt", font=("Segoe UI", 22, "bold"), fg="#FFFFFF", bg="#0F172A").pack(anchor="center", pady=(1, 2))
         tk.Label(
             hero,
-            text="Smart College Budgeting, Category Tracking & Optimal Debt Settlement",
+            text="Campus Expense & Split Tracker • Smart Budgeting & Frictionless Settle-Up",
             font=("Segoe UI", 9),
             fg="#94A3B8",
             bg="#0F172A"
@@ -926,7 +927,7 @@ class CampusExpenseApp(tk.Tk):
 
         start_btn = tk.Button(
             cta_frame,
-            text="🚀 Open Expense Tracker",
+            text="🚀 Let's Go Guilt Free",
             font=("Segoe UI", 11, "bold"),
             bg="#2563EB",
             fg="#FFFFFF",
@@ -961,7 +962,10 @@ class CampusExpenseApp(tk.Tk):
         # 2. KPI Summary Dashboard Cards
         self.build_kpi_dashboard(self.tracker_frame)
 
-        # 3. Main Body Frame (Input Form + Data Table with Filters)
+        # 3. Action Bar (Anchored at the bottom)
+        self.build_action_bar(self.tracker_frame)
+
+        # 4. Main Body Frame (Input Form + Data Table with Filters)
         body_frame = tk.Frame(self.tracker_frame, bg="#F1F5F9", padx=12, pady=2)
         body_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -974,9 +978,6 @@ class CampusExpenseApp(tk.Tk):
         # Data Table (Treeview)
         self.build_data_table(body_frame)
 
-        # 4. Action Bar (Bottom)
-        self.build_action_bar(self.tracker_frame)
-
     def build_header(self, parent):
         """Creates presentation header bar with app branding and back-to-landing button."""
         header_frame = tk.Frame(parent, bg="#0F172A", padx=16, pady=10)
@@ -987,8 +988,8 @@ class CampusExpenseApp(tk.Tk):
 
         app_title = tk.Label(
             left_box,
-            text="🎓 Campus Expense & Split Tracker",
-            font=("Segoe UI", 15, "bold"),
+            text="🎓 No Guilt",
+            font=("Segoe UI", 16, "bold"),
             fg="#FFFFFF",
             bg="#0F172A"
         )
@@ -996,7 +997,7 @@ class CampusExpenseApp(tk.Tk):
 
         app_sub = tk.Label(
             left_box,
-            text="Shared budget tracking, category breakdown & optimal student debt settlement",
+            text="Campus Expense & Split Tracker • Shared budget tracking & optimal debt settlement",
             font=("Segoe UI", 8),
             fg="#94A3B8",
             bg="#0F172A"
@@ -1185,28 +1186,29 @@ class CampusExpenseApp(tk.Tk):
         bar = tk.Frame(parent, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=8)
         bar.pack(fill=tk.X, side=tk.BOTTOM)
 
+        # Right: Action Buttons (packed first so they always render in full)
+        settle_btn = ttk.Button(bar, text="🤝 Settle Up", style="Purple.TButton", command=self.open_settle_up_modal)
+        settle_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        export_btn = ttk.Button(bar, text="📥 Export CSV", style="Success.TButton", command=self.export_to_csv)
+        export_btn.pack(side=tk.RIGHT, padx=4)
+
+        del_btn = ttk.Button(bar, text="🗑️ Delete", style="Danger.TButton", command=self.on_delete_selected)
+        del_btn.pack(side=tk.RIGHT, padx=4)
+
+        reset_btn = ttk.Button(bar, text="🧹 Erase All Data", style="Secondary.TButton", command=self.on_reset_all_data)
+        reset_btn.pack(side=tk.RIGHT, padx=4)
+
         # Left: Live status label
         self.status_lbl = tk.Label(
             bar,
-            text="Ready. Enter an expense above to get started. Press Ctrl+S for Settle-Up.",
+            text="Ready. Enter an expense above to get started.",
             font=("Segoe UI", 9),
             fg="#475569",
-            bg="#FFFFFF"
+            bg="#FFFFFF",
+            anchor="w"
         )
-        self.status_lbl.pack(side=tk.LEFT)
-
-        # Right: Action Buttons
-        settle_btn = ttk.Button(bar, text="🤝 Settle Up Summary", style="Purple.TButton", command=self.open_settle_up_modal)
-        settle_btn.pack(side=tk.RIGHT, padx=(6, 0))
-
-        export_btn = ttk.Button(bar, text="📥 Export to CSV", style="Success.TButton", command=self.export_to_csv)
-        export_btn.pack(side=tk.RIGHT, padx=6)
-
-        del_btn = ttk.Button(bar, text="🗑️ Delete Selected", style="Danger.TButton", command=self.on_delete_selected)
-        del_btn.pack(side=tk.RIGHT, padx=6)
-
-        reset_btn = ttk.Button(bar, text="🧹 Erase All Data", style="Secondary.TButton", command=self.on_reset_all_data)
-        reset_btn.pack(side=tk.RIGHT)
+        self.status_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     # ==========================================================================
     # LOGIC & EVENT HANDLERS

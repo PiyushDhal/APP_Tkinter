@@ -1,5 +1,5 @@
 """
-Comprehensive Test Suite for Campus Expense & Split Tracker
+Comprehensive Test Suite for No Guilt - Campus Expense & Split Tracker
 Verifies zero-data start, dynamic payer autocomplete based purely on user input,
 input validation edge-cases, settlement algorithms, and Tkinter GUI layout.
 """

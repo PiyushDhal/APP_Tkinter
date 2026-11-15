@@ -1,10 +1,10 @@
-# 🎓 Campus Expense and Split Tracker
+# 🎓 No Guilt - Campus Expense and Split Tracker
 
 A desktop application built with Python, Tkinter, and SQLite to help students and roommates track shared expenses, split costs, and calculate who owes whom.
 
 ## Features
 
-- Welcome landing screen with one-click navigation to the tracker dashboard.
+- Welcome landing screen with "Let's Go Guilt Free" button for quick navigation to the tracker dashboard.
 - Expense entry form with item description, category, amount, payer name, and split count.
 - Input validation to catch blank fields, negative values, and non-numeric inputs.
 - Live summary cards displaying total group spend, total transactions, and the highest spending category.
