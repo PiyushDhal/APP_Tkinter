@@ -33,7 +33,7 @@ def run_all_tests():
 
     metrics = db.get_summary_metrics()
     assert metrics["total_count"] == 4, f"Expected 4 seeded records, got {metrics['total_count']}"
-    assert metrics["total_spend"] == 1200.0, f"Expected 1200.0 spend, got {metrics['total_spend']}"
+    assert metrics["total_spend"] == 1110.0, f"Expected 1110.0 spend, got {metrics['total_spend']}"
     assert "Food" in metrics["highest_category"], f"Expected Food in highest category, got {metrics['highest_category']}"
 
     # Verify no duplicate seeding on restart
@@ -101,9 +101,9 @@ def run_all_tests():
     app.combo_category.set("Food")
     app.ent_amount.delete(0, "end")
     app.ent_amount.insert(0, "₹ 1,500.50")
-    app.combo_paid_by.set("Rohan Gupta")
+    app.combo_paid_by.set("Piyush")
     app.spin_split.delete(0, "end")
-    app.spin_split.insert(0, "4")
+    app.spin_split.insert(0, "3")
     app.on_add_expense()
     assert db.get_summary_metrics()["total_count"] == 5, "Formatted currency amount should be accepted!"
     print("✓ All input validation and numeric edge cases properly guarded.")

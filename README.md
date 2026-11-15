@@ -107,7 +107,7 @@ The settlement window computes fair balances across group members using exact in
    - Select `"Food"` from the Category dropdown to show category-specific expenses.
    - Click **"Reset"** to restore all records.
 3. **Add New Expense:**
-   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `₹ 120.00`, Paid By: `Aarav Sharma`, Split: `4`.
+   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `₹ 120.00`, Paid By: `Piyush`, Split: `3`.
    - Show how the KPI summary cards instantly update, table row striping adjusts, and the status bar gives immediate feedback.
 4. **Column Sorting:** Click on `Total (₹)` or `Each Owes (₹)` to demonstrate ascending/descending sorting.
 5. **Settle Up Modal:**
