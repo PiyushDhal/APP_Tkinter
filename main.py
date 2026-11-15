@@ -895,22 +895,6 @@ class CampusExpenseApp(tk.Tk):
         )
         app_sub.pack(anchor="w", pady=(1, 0))
 
-        # Right side info pill
-        right_box = tk.Frame(header_frame, bg="#0F172A")
-        right_box.pack(side=tk.RIGHT)
-
-        db_badge = tk.Label(
-            right_box,
-            text="● SQLite: campus_expenses.db",
-            font=("Segoe UI", 8, "bold"),
-            fg="#10B981",
-            bg="#1E293B",
-            padx=8,
-            pady=3,
-            relief="flat"
-        )
-        db_badge.pack(anchor="e")
-
     def build_kpi_dashboard(self):
         """Builds 3 modern high-contrast KPI cards."""
         dash_container = tk.Frame(self, bg="#F1F5F9", padx=12, pady=2)
