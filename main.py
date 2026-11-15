@@ -51,8 +51,6 @@ CATEGORIES = [
     "Other"
 ]
 
-DEFAULT_MEMBERS = ["Piyush", "Manan", "Yukti"]
-
 CATEGORY_DISPLAY = {
     "Food": "🍔 Food",
     "Travel": "🚖 Travel",
@@ -101,20 +99,6 @@ class DatabaseManager:
                 conn.close()
         except sqlite3.Error as err:
             print(f"Database Initialization Error: {err}", file=sys.stderr)
-
-    def seed_demo_data(self, cursor):
-        """Seeds 4 realistic campus expense records for Piyush, Manan, and Yukti."""
-        today = datetime.now().strftime("%Y-%m-%d")
-        demo_records = [
-            ("Cafeteria Lunch Combo", "Food", 450.00, "Piyush", 3, today),
-            ("Campus Uber Cab Fare", "Travel", 300.00, "Manan", 3, today),
-            ("Lab Manual & Xerox", "Stationery", 150.00, "Yukti", 3, today),
-            ("Hostel Night Snacks", "Food", 210.00, "Piyush", 3, today)
-        ]
-        cursor.executemany("""
-            INSERT INTO expenses (item, category, amount, paid_by, split_count, date_added)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, demo_records)
 
     def add_expense(self, item, category, amount, paid_by, split_count, date_added=None):
         """Inserts a new expense into SQLite3 with clean connection handling."""
@@ -967,12 +951,12 @@ class CampusExpenseApp(tk.Tk):
         self.ent_amount = ttk.Entry(form_frame, font=("Segoe UI", 9))
         self.ent_amount.grid(row=1, column=3, sticky="ew", padx=4, pady=(0, 6))
 
-        self.combo_paid_by = ttk.Combobox(form_frame, values=DEFAULT_MEMBERS, font=("Segoe UI", 9))
-        self.combo_paid_by.set("Piyush")
+        self.combo_paid_by = ttk.Combobox(form_frame, font=("Segoe UI", 9))
+        self.combo_paid_by.set("")
         self.combo_paid_by.grid(row=1, column=4, sticky="ew", padx=4, pady=(0, 6))
 
         self.spin_split = ttk.Spinbox(form_frame, from_=1, to=20, font=("Segoe UI", 9), justify="center")
-        self.spin_split.set(3)
+        self.spin_split.set(2)
         self.spin_split.grid(row=1, column=5, sticky="ew", padx=4, pady=(0, 6))
 
         # Row 2: Form Action Buttons
@@ -1180,8 +1164,8 @@ class CampusExpenseApp(tk.Tk):
         self.ent_item.delete(0, tk.END)
         self.combo_category.set("Food")
         self.ent_amount.delete(0, tk.END)
-        self.combo_paid_by.set("Piyush")
-        self.spin_split.set(3)
+        self.combo_paid_by.set("")
+        self.spin_split.set(2)
         self.ent_item.focus_set()
 
     def reset_filters(self):
@@ -1239,10 +1223,9 @@ class CampusExpenseApp(tk.Tk):
         self.kpi_cat_val.configure(text=metrics['highest_category'])
 
     def refresh_payer_autocomplete(self):
-        """Updates the Paid By combobox dropdown with all distinct student names."""
-        db_payers = self.db.get_distinct_payers()
-        all_payers = sorted(list(set(DEFAULT_MEMBERS + db_payers)))
-        self.combo_paid_by["values"] = all_payers
+        """Updates the Paid By combobox dropdown with distinct student names dynamically from user input."""
+        payers = self.db.get_distinct_payers()
+        self.combo_paid_by["values"] = payers
 
     def on_delete_selected(self):
         """Prompts confirmation and deletes selected expense row."""

@@ -1,6 +1,6 @@
 """
 Comprehensive Test Suite for Campus Expense & Split Tracker
-Verifies zero-data start, dynamic updates upon user input,
+Verifies zero-data start, dynamic payer autocomplete based purely on user input,
 input validation edge-cases, settlement algorithms, and Tkinter GUI layout.
 """
 
@@ -18,17 +18,17 @@ messagebox.askyesno = lambda *args, **kwargs: True
 
 def run_all_tests():
     print("==================================================")
-    print("RUNNING ZERO-DATA START & DYNAMIC UPDATE TEST SUITE")
+    print("RUNNING ZERO-DATA & DYNAMIC USER INPUT TEST SUITE")
     print("==================================================")
 
-    test_db_path = "test_zero_campus.db"
+    test_db_path = "test_dynamic_campus.db"
     if os.path.exists(test_db_path):
         os.remove(test_db_path)
 
     # --------------------------------------------------------------------------
-    # 1. VERIFY ZERO-DATA INITIALIZATION
+    # 1. VERIFY ZERO-DATA & ZERO-NAME INITIALIZATION
     # --------------------------------------------------------------------------
-    print("\n[1/6] Verifying Clean Zero-Data Start...")
+    print("\n[1/6] Verifying Clean Zero-Data & Zero-Name Start...")
     db = main.DatabaseManager(test_db_path)
 
     metrics = db.get_summary_metrics()
@@ -36,11 +36,9 @@ def run_all_tests():
     assert metrics["total_spend"] == 0.0, f"Expected 0.0 spend, got {metrics['total_spend']}"
     assert metrics["highest_category"] == "N/A", f"Expected N/A, got {metrics['highest_category']}"
 
-    # Verify restarts maintain 0 records
-    db_restart = main.DatabaseManager(test_db_path)
-    metrics_restart = db_restart.get_summary_metrics()
-    assert metrics_restart["total_count"] == 0, f"Expected 0 records on restart, got {metrics_restart['total_count']}"
-    print("✓ Application starts completely clean from zero records.")
+    payers = db.get_distinct_payers()
+    assert len(payers) == 0, f"Expected 0 payers initially, got {payers}"
+    print("✓ Application starts completely clean with zero records and zero pre-set names.")
 
     # --------------------------------------------------------------------------
     # 2. INPUT VALIDATION & NUMERIC EDGE CASES
@@ -48,26 +46,39 @@ def run_all_tests():
     print("\n[2/6] Testing Input Validation Guards at Zero State...")
     app = main.CampusExpenseApp()
     app.db = db
+    app.refresh_payer_autocomplete()
     app.update()
 
     assert app.kpi_spend_val.cget("text") == "₹ 0.00"
     assert app.kpi_tx_val.cget("text") == "0 Records"
     assert app.kpi_cat_val.cget("text") == "N/A"
     assert len(app.tree.get_children()) == 0
+    assert len(app.combo_paid_by["values"]) == 0, "Dropdown should have 0 names initially!"
+    assert app.combo_paid_by.get() == "", "Paid By field should be initially empty!"
 
     # Test blank item
     app.ent_item.delete(0, "end")
     app.ent_item.insert(0, "   ")
     app.ent_amount.insert(0, "100")
-    app.combo_paid_by.set("Piyush")
+    app.combo_paid_by.set("Student1")
     app.on_add_expense()
     assert db.get_summary_metrics()["total_count"] == 0, "Blank item should be rejected!"
+
+    # Test blank paid by
+    app.ent_item.delete(0, "end")
+    app.ent_item.insert(0, "Lunch")
+    app.ent_amount.delete(0, "end")
+    app.ent_amount.insert(0, "100")
+    app.combo_paid_by.set("   ")
+    app.on_add_expense()
+    assert db.get_summary_metrics()["total_count"] == 0, "Blank paid_by should be rejected!"
 
     # Test non-numeric amount
     app.ent_item.delete(0, "end")
     app.ent_item.insert(0, "Lunch")
     app.ent_amount.delete(0, "end")
     app.ent_amount.insert(0, "abc")
+    app.combo_paid_by.set("Student1")
     app.on_add_expense()
     assert db.get_summary_metrics()["total_count"] == 0, "Non-numeric amount should be rejected!"
 
@@ -104,87 +115,70 @@ def run_all_tests():
     # --------------------------------------------------------------------------
     # 3. DYNAMIC UPDATING AS USER GIVES INPUT
     # --------------------------------------------------------------------------
-    print("\n[3/6] Testing Dynamic Updating as User Enters Records...")
+    print("\n[3/6] Testing Dynamic Storage and Dropdown Growth as User Inputs Names...")
 
-    # Input 1: Piyush adds Food ₹ 450
+    # Input 1: User types "Alex", Food, ₹ 400
     app.ent_item.delete(0, "end")
-    app.ent_item.insert(0, "Cafeteria Lunch Combo")
+    app.ent_item.insert(0, "Subway Sandwich")
     app.combo_category.set("Food")
     app.ent_amount.delete(0, "end")
-    app.ent_amount.insert(0, "₹ 450.00")
-    app.combo_paid_by.set("Piyush")
+    app.ent_amount.insert(0, "₹ 400.00")
+    app.combo_paid_by.set("Alex")
     app.spin_split.delete(0, "end")
-    app.spin_split.insert(0, "3")
+    app.spin_split.insert(0, "2")
     app.on_add_expense()
 
     assert db.get_summary_metrics()["total_count"] == 1
-    assert app.kpi_spend_val.cget("text") == "₹ 450.00"
+    assert app.kpi_spend_val.cget("text") == "₹ 400.00"
     assert app.kpi_tx_val.cget("text") == "1 Records"
     assert "Food" in app.kpi_cat_val.cget("text")
     assert len(app.tree.get_children()) == 1
+    assert "Alex" in app.combo_paid_by["values"], "Dropdown should now dynamically include 'Alex'!"
 
-    # Input 2: Manan adds Travel ₹ 300
+    # Input 2: User types "Sam", Travel, ₹ 200
     app.ent_item.delete(0, "end")
-    app.ent_item.insert(0, "Campus Uber Cab Fare")
+    app.ent_item.insert(0, "Cab to Station")
     app.combo_category.set("Travel")
     app.ent_amount.delete(0, "end")
-    app.ent_amount.insert(0, "300.00")
-    app.combo_paid_by.set("Manan")
+    app.ent_amount.insert(0, "200.00")
+    app.combo_paid_by.set("Sam")
     app.spin_split.delete(0, "end")
-    app.spin_split.insert(0, "3")
+    app.spin_split.insert(0, "2")
     app.on_add_expense()
 
     assert db.get_summary_metrics()["total_count"] == 2
-    assert app.kpi_spend_val.cget("text") == "₹ 750.00"
+    assert app.kpi_spend_val.cget("text") == "₹ 600.00"
     assert app.kpi_tx_val.cget("text") == "2 Records"
+    assert "Alex" in app.combo_paid_by["values"]
+    assert "Sam" in app.combo_paid_by["values"], "Dropdown should now dynamically include 'Sam'!"
 
-    # Input 3: Yukti adds Stationery ₹ 150
-    app.ent_item.delete(0, "end")
-    app.ent_item.insert(0, "Lab Manual & Xerox")
-    app.combo_category.set("Stationery")
-    app.ent_amount.delete(0, "end")
-    app.ent_amount.insert(0, "150.00")
-    app.combo_paid_by.set("Yukti")
-    app.spin_split.delete(0, "end")
-    app.spin_split.insert(0, "3")
-    app.on_add_expense()
-
-    assert db.get_summary_metrics()["total_count"] == 3
-    assert app.kpi_spend_val.cget("text") == "₹ 900.00"
-    assert app.kpi_tx_val.cget("text") == "3 Records"
-    assert len(app.tree.get_children()) == 3
-
-    print("✓ Dynamic storage and live UI updating confirmed.")
+    print("✓ Dynamic storage and dropdown autocomplete populated purely from user input.")
 
     # --------------------------------------------------------------------------
     # 4. SETTLEMENT COMPUTATION FOR DYNAMIC DATA
     # --------------------------------------------------------------------------
-    print("\n[4/6] Verifying Settle-Up Calculations for Dynamic Entries...")
+    print("\n[4/6] Verifying Settle-Up Calculations for User Input Data...")
     summary, txs, total_spend = db.get_settlement_data()
-    assert total_spend == 900.00
-    assert summary["Piyush"]["paid"] == 450.00
-    assert summary["Piyush"]["fair_share"] == 300.00
-    assert summary["Piyush"]["net_balance"] == 150.00  # Gets back ₹150
+    assert total_spend == 600.00
+    assert summary["Alex"]["paid"] == 400.00
+    assert summary["Alex"]["fair_share"] == 300.00
+    assert summary["Alex"]["net_balance"] == 100.00  # Gets back ₹100
 
-    assert summary["Manan"]["paid"] == 300.00
-    assert summary["Manan"]["fair_share"] == 300.00
-    assert summary["Manan"]["net_balance"] == 0.00  # Settled up
-
-    assert summary["Yukti"]["paid"] == 150.00
-    assert summary["Yukti"]["fair_share"] == 300.00
-    assert summary["Yukti"]["net_balance"] == -150.00  # Owes ₹150
+    assert summary["Sam"]["paid"] == 200.00
+    assert summary["Sam"]["fair_share"] == 300.00
+    assert summary["Sam"]["net_balance"] == -100.00  # Owes ₹100
 
     assert len(txs) == 1
-    assert txs[0]["from"] == "Yukti"
-    assert txs[0]["to"] == "Piyush"
-    assert txs[0]["amount"] == 150.00
+    assert txs[0]["from"] == "Sam"
+    assert txs[0]["to"] == "Alex"
+    assert txs[0]["amount"] == 100.00
     print("✓ Settle-up modal mathematically resolves debts accurately.")
 
     # --------------------------------------------------------------------------
     # 5. FILTERING, SEARCH, CSV EXPORT & DELETION
     # --------------------------------------------------------------------------
     print("\n[5/6] Testing Real-Time Search, Filter, CSV Export & Deletion...")
-    app.search_var.set("Uber")
+    app.search_var.set("Cab")
     app.load_expenses()
     assert len(app.tree.get_children()) == 1
 
@@ -192,7 +186,7 @@ def run_all_tests():
     assert os.path.exists("expenses_report.csv")
 
     app.reset_filters()
-    assert len(app.tree.get_children()) == 3
+    assert len(app.tree.get_children()) == 2
 
     # Delete all records
     for child in list(app.tree.get_children()):

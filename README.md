@@ -7,7 +7,7 @@ A presentation-ready, high-contrast desktop application built in Python using **
 ## 🌟 Key Presentation Features
 
 - **Self-Contained & Zero Setup:** Runs out of the box on standard Python 3.x installations without external dependencies or cloud databases. SQLite database (`campus_expenses.db`) is automatically created and initialized locally.
-- **Zero-Data Start & Dynamic Input:** Starts completely clean with zero initial records. The database, live dashboard KPIs, table, and Settle-Up calculations dynamically update in real time as the user logs expenses.
+- **Zero-Data & Dynamic Roster:** Starts completely clean with zero initial records and no pre-set student names. The database, live dashboard KPIs, table, and student dropdown dynamically grow and recalculate in real time as the user inputs names and logs expenses.
 - **Presentation-Grade Modern UI:**
   - Styled with the modern `ttk` `'clam'` theme.
   - Windows High-DPI awareness enabled for razor-sharp typography and crisp borders on classroom projectors and 4K displays.
@@ -107,8 +107,8 @@ The settlement window computes fair balances across group members using exact in
    - Select `"Food"` from the Category dropdown to show category-specific expenses.
    - Click **"Reset"** to restore all records.
 3. **Add New Expense:**
-   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `₹ 120.00`, Paid By: `Piyush`, Split: `3`.
-   - Show how the KPI summary cards instantly update, table row striping adjusts, and the status bar gives immediate feedback.
+   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `₹ 120.00`, Paid By: `Rohan`, Split: `2`.
+   - Show how the KPI summary cards instantly update, table row striping adjusts, the status bar gives immediate feedback, and `"Rohan"` is dynamically added to the Paid By autocomplete dropdown for future entries.
 4. **Column Sorting:** Click on `Total (₹)` or `Each Owes (₹)` to demonstrate ascending/descending sorting.
 5. **Settle Up Modal:**
    - Click **"🤝 Settle Up Summary"** (or press `Ctrl+S`).
