@@ -9,25 +9,27 @@ settlement transactions.
 Key Features:
 - Self-contained SQLite3 database (campus_expenses.db) with auto-seeding on first launch.
 - Presentation-grade modern ttk 'clam' UI with Segoe UI typography and High-DPI support.
+- Sensible projector geometry: default 1000x650, minsize 850x550.
 - Real-time Summary KPI Cards: Total Group Spend, Total Transactions, Highest Category.
-- Clean input form with robust input validation and warning alerts.
+- Clean input form with robust input validation (preventing blank, negative, 0, inf, or nan).
 - Live real-time search (by item or payer) and category combobox filtering.
-- Alternating striped Treeview data table with dynamic 'Each Owes' calculation and column sorting.
-- Modal Settle-Up window with individual net balances and optimal who-owes-whom transactions.
-- CSV report export ('expenses_report.csv') with timestamped summary.
+- Alternating striped Treeview data table with both horizontal & vertical scrollbars.
+- Settle-Up modal with exact paise arithmetic, individual net balances, and minimal transactions.
+- CSV report export ('expenses_report.csv') supporting both filtered and full views.
 
 Author: Campus Expense Tracker Team
 """
 
 import sys
 import os
+import math
 import sqlite3
 import csv
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
-# Enable Windows High-DPI awareness so fonts render crisp and sharp on projectors & 4K displays
+# Enable Windows High-DPI awareness so fonts render crisp and sharp on projectors & modern monitors
 try:
     from ctypes import windll
     windll.shcore.SetProcessDpiAwareness(1)
@@ -63,41 +65,44 @@ CATEGORY_DISPLAY = {
 # DATABASE MANAGER
 # ==============================================================================
 class DatabaseManager:
-    """Handles all SQLite3 database operations, connections, and demo seeding."""
+    """Handles all SQLite3 database operations, connection lifecycles, and demo seeding."""
 
     def __init__(self, db_path=DB_FILENAME):
         self.db_path = db_path
         self.init_database()
 
     def get_connection(self):
-        """Returns a new SQLite connection with Row factory."""
+        """Returns a new SQLite connection with Row factory enabled."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
     def init_database(self):
         """Creates the expenses table and automatically seeds realistic demo data if empty."""
-        conn = self.get_connection()
         try:
-            with conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS expenses (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        item TEXT NOT NULL,
-                        category TEXT NOT NULL,
-                        amount REAL NOT NULL,
-                        paid_by TEXT NOT NULL,
-                        split_count INTEGER NOT NULL,
-                        date_added TEXT NOT NULL
-                    )
-                """)
-                cursor.execute("SELECT COUNT(*) AS cnt FROM expenses")
-                row = cursor.fetchone()
-                if row["cnt"] == 0:
-                    self.seed_demo_data(cursor)
-        finally:
-            conn.close()
+            conn = self.get_connection()
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS expenses (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            item TEXT NOT NULL,
+                            category TEXT NOT NULL,
+                            amount REAL NOT NULL,
+                            paid_by TEXT NOT NULL,
+                            split_count INTEGER NOT NULL,
+                            date_added TEXT NOT NULL
+                        )
+                    """)
+                    cursor.execute("SELECT COUNT(*) AS cnt FROM expenses")
+                    row = cursor.fetchone()
+                    if row and row["cnt"] == 0:
+                        self.seed_demo_data(cursor)
+            finally:
+                conn.close()
+        except sqlite3.Error as err:
+            print(f"Database Initialization Error: {err}", file=sys.stderr)
 
     def seed_demo_data(self, cursor):
         """Seeds 4 realistic campus expense records for immediate presentation readiness."""
@@ -114,7 +119,7 @@ class DatabaseManager:
         """, demo_records)
 
     def add_expense(self, item, category, amount, paid_by, split_count, date_added=None):
-        """Inserts a new expense into SQLite3."""
+        """Inserts a new expense into SQLite3 with clean connection handling."""
         if not date_added:
             date_added = datetime.now().strftime("%Y-%m-%d")
 
@@ -127,6 +132,9 @@ class DatabaseManager:
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (item, category, amount, paid_by, split_count, date_added))
                 return cursor.lastrowid
+        except sqlite3.Error as err:
+            print(f"Database Insert Error: {err}", file=sys.stderr)
+            raise
         finally:
             conn.close()
 
@@ -138,6 +146,9 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
                 return cursor.rowcount > 0
+        except sqlite3.Error as err:
+            print(f"Database Delete Error: {err}", file=sys.stderr)
+            return False
         finally:
             conn.close()
 
@@ -151,8 +162,10 @@ class DatabaseManager:
             params.append(category_filter)
 
         if search_query:
-            query += " AND (LOWER(item) LIKE ? OR LOWER(paid_by) LIKE ?)"
-            wildcard = f"%{search_query.strip().lower()}%"
+            # Escape literal wildcards for strict search
+            escaped_q = search_query.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query += " AND (LOWER(item) LIKE ? ESCAPE '\\' OR LOWER(paid_by) LIKE ? ESCAPE '\\')"
+            wildcard = f"%{escaped_q}%"
             params.extend([wildcard, wildcard])
 
         query += " ORDER BY id DESC"
@@ -162,6 +175,9 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute(query, params)
             return cursor.fetchall()
+        except sqlite3.Error as err:
+            print(f"Database Query Error: {err}", file=sys.stderr)
+            return []
         finally:
             conn.close()
 
@@ -172,8 +188,8 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) AS total_count, COALESCE(SUM(amount), 0.0) AS total_spend FROM expenses")
             overall = cursor.fetchone()
-            total_count = overall["total_count"]
-            total_spend = overall["total_spend"]
+            total_count = overall["total_count"] if overall else 0
+            total_spend = overall["total_spend"] if overall else 0.0
 
             cursor.execute("""
                 SELECT category, SUM(amount) AS cat_sum
@@ -183,7 +199,7 @@ class DatabaseManager:
                 LIMIT 1
             """)
             top_cat_row = cursor.fetchone()
-            if top_cat_row and top_cat_row["cat_sum"] > 0:
+            if top_cat_row and top_cat_row["cat_sum"] and top_cat_row["cat_sum"] > 0:
                 cat_name = top_cat_row["category"]
                 display_cat = CATEGORY_DISPLAY.get(cat_name, cat_name)
                 highest_category = f"{display_cat} (₹{top_cat_row['cat_sum']:,.2f})"
@@ -195,22 +211,34 @@ class DatabaseManager:
                 "total_count": total_count,
                 "highest_category": highest_category
             }
+        except sqlite3.Error as err:
+            print(f"Database Summary Error: {err}", file=sys.stderr)
+            return {
+                "total_spend": 0.0,
+                "total_count": 0,
+                "highest_category": "N/A"
+            }
         finally:
             conn.close()
 
     def get_distinct_payers(self):
-        """Returns sorted list of distinct names who have paid expenses."""
+        """Returns sorted list of distinct student names who have paid expenses."""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT DISTINCT paid_by FROM expenses ORDER BY paid_by ASC")
-            return [row["paid_by"] for row in cursor.fetchall() if row["paid_by"].strip()]
+            rows = cursor.fetchall()
+            return [row["paid_by"] for row in rows if row["paid_by"] and row["paid_by"].strip()]
+        except sqlite3.Error as err:
+            print(f"Database Distinct Payers Error: {err}", file=sys.stderr)
+            return []
         finally:
             conn.close()
 
     def get_settlement_data(self):
         """
         Calculates group spend, member payments, fair shares, and net balances.
+        Uses exact integer paise arithmetic to completely eliminate floating-point drift.
         Generates simplified optimal transactions to settle all debts (Greedy Min-Cash-Flow).
         Returns: (members_summary, transactions_to_settle, total_group_spend)
         """
@@ -219,6 +247,9 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute("SELECT amount, paid_by, split_count FROM expenses")
             rows = cursor.fetchall()
+        except sqlite3.Error as err:
+            print(f"Database Settlement Query Error: {err}", file=sys.stderr)
+            return {}, [], 0.0
         finally:
             conn.close()
 
@@ -239,55 +270,62 @@ class DatabaseManager:
         if num_members == 0:
             return {}, [], 0.0
 
-        # Fair share per student (equal group division across participating members)
-        fair_share = total_group_spend / num_members
+        # Exact paise arithmetic
+        total_paise = int(round(total_group_spend * 100))
+        base_share_paise = total_paise // num_members
+        rem_paise = total_paise % num_members
 
-        balances = {}
+        fair_shares_paise = {}
+        for idx, member in enumerate(members):
+            fair_shares_paise[member] = base_share_paise + (1 if idx < rem_paise else 0)
+
         members_summary = {}
+        net_paise = {}
         for member in members:
-            paid = contributions.get(member, 0.0)
-            net_balance = paid - fair_share
-            balances[member] = net_balance
+            paid_paise = int(round(contributions[member] * 100))
+            share_paise = fair_shares_paise[member]
+            net = paid_paise - share_paise
+            net_paise[member] = net
             members_summary[member] = {
-                "paid": paid,
-                "fair_share": fair_share,
-                "net_balance": net_balance
+                "paid": paid_paise / 100.0,
+                "fair_share": share_paise / 100.0,
+                "net_balance": net / 100.0
             }
 
         # Greedy debt settlement algorithm
-        transactions = []
-        debtors = []    # (name, amount_they_owe)
-        creditors = []  # (name, amount_they_receive)
+        debtors = []    # [name, paise_they_owe]
+        creditors = []  # [name, paise_they_receive]
 
-        for name, bal in balances.items():
-            if bal < -0.009:
+        for name, bal in net_paise.items():
+            if bal < 0:
                 debtors.append([name, -bal])
-            elif bal > 0.009:
+            elif bal > 0:
                 creditors.append([name, bal])
 
-        # Sort highest debtor and highest creditor first for clean minimum settlements
+        # Sort highest debtor and highest creditor first for minimal repayments
         debtors.sort(key=lambda x: x[1], reverse=True)
         creditors.sort(key=lambda x: x[1], reverse=True)
 
+        transactions = []
         i, j = 0, 0
         while i < len(debtors) and j < len(creditors):
             debtor_name, debt_amt = debtors[i]
             creditor_name, cred_amt = creditors[j]
 
-            settle_amt = min(debt_amt, cred_amt)
-            if settle_amt > 0.009:
+            settle = min(debt_amt, cred_amt)
+            if settle > 0:
                 transactions.append({
                     "from": debtor_name,
                     "to": creditor_name,
-                    "amount": round(settle_amt, 2)
+                    "amount": settle / 100.0
                 })
 
-            debtors[i][1] -= settle_amt
-            creditors[j][1] -= settle_amt
+            debtors[i][1] -= settle
+            creditors[j][1] -= settle
 
-            if debtors[i][1] < 0.01:
+            if debtors[i][1] == 0:
                 i += 1
-            if creditors[j][1] < 0.01:
+            if creditors[j][1] == 0:
                 j += 1
 
         return members_summary, transactions, total_group_spend
@@ -304,37 +342,42 @@ class SettleUpDialog(tk.Toplevel):
         self.parent = parent
         self.db = db_manager
         self.title("🤝 Group Settle Up Summary — Campus Expense Tracker")
-        self.geometry("820x650")
-        self.minsize(740, 540)
+        self.geometry("760x560")
+        self.minsize(660, 460)
         self.configure(bg="#F8FAFC")
         self.transient(parent)
         self.grab_set()
 
         # Center on parent window
-        self.center_window(820, 650)
+        self.center_dialog(760, 560)
 
         self.members_summary, self.transactions, self.total_spend = self.db.get_settlement_data()
         self.setup_ui()
 
-    def center_window(self, width, height):
+    def center_dialog(self, width, height):
         self.update_idletasks()
         pw = self.parent.winfo_width()
         ph = self.parent.winfo_height()
         px = self.parent.winfo_rootx()
         py = self.parent.winfo_rooty()
-        x = max(0, px + (pw - width) // 2)
-        y = max(0, py + (ph - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+
+        w = min(width, sw - 40)
+        h = min(height, sh - 80)
+        x = max(0, px + (pw - w) // 2)
+        y = max(0, py + (ph - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     def setup_ui(self):
         # Header banner
-        header_frame = tk.Frame(self, bg="#1E293B", padx=22, pady=16)
+        header_frame = tk.Frame(self, bg="#1E293B", padx=20, pady=12)
         header_frame.pack(fill=tk.X)
 
         title_lbl = tk.Label(
             header_frame,
             text="🤝 Group Balance Sheet & Settle-Up Plan",
-            font=("Segoe UI", 15, "bold"),
+            font=("Segoe UI", 14, "bold"),
             fg="#FFFFFF",
             bg="#1E293B"
         )
@@ -347,10 +390,10 @@ class SettleUpDialog(tk.Toplevel):
             fg="#94A3B8",
             bg="#1E293B"
         )
-        subtitle_lbl.pack(anchor="w", pady=(2, 0))
+        subtitle_lbl.pack(anchor="w", pady=(1, 0))
 
         # Main content container
-        content_frame = tk.Frame(self, bg="#F8FAFC", padx=20, pady=12)
+        content_frame = tk.Frame(self, bg="#F8FAFC", padx=16, pady=10)
         content_frame.pack(fill=tk.BOTH, expand=True)
 
         if not self.members_summary:
@@ -367,7 +410,7 @@ class SettleUpDialog(tk.Toplevel):
 
         # Top Metric Stat Cards
         stats_frame = tk.Frame(content_frame, bg="#F8FAFC")
-        stats_frame.pack(fill=tk.X, pady=(0, 12))
+        stats_frame.pack(fill=tk.X, pady=(0, 8))
 
         member_count = len(self.members_summary)
         avg_share = (self.total_spend / member_count) if member_count else 0.0
@@ -375,14 +418,14 @@ class SettleUpDialog(tk.Toplevel):
         pills = [
             ("TOTAL GROUP SPEND", f"₹ {self.total_spend:,.2f}", "#2563EB", "#EFF6FF"),
             ("ACTIVE STUDENTS", f"{member_count} Members", "#0D9488", "#F0FDFA"),
-            ("EQUAL FAIR SHARE", f"₹ {avg_share:,.2f} / person", "#7C3AED", "#F5F3FF")
+            ("EQUAL FAIR SHARE", f"₹ {avg_share:,.2f} / student", "#7C3AED", "#F5F3FF")
         ]
 
         for idx, (label, val, accent, pill_bg) in enumerate(pills):
-            p = tk.Frame(stats_frame, bg=pill_bg, bd=1, relief="solid", padx=14, pady=8)
-            p.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0 if idx == 0 else 8, 0))
+            p = tk.Frame(stats_frame, bg=pill_bg, bd=1, relief="solid", padx=12, pady=6)
+            p.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0 if idx == 0 else 6, 0))
             tk.Label(p, text=label, font=("Segoe UI", 8, "bold"), fg=accent, bg=pill_bg).pack(anchor="w")
-            tk.Label(p, text=val, font=("Segoe UI", 13, "bold"), fg="#0F172A", bg=pill_bg).pack(anchor="w", pady=(2, 0))
+            tk.Label(p, text=val, font=("Segoe UI", 12, "bold"), fg="#0F172A", bg=pill_bg).pack(anchor="w", pady=(1, 0))
 
         # Section 1: Individual Breakdown Table
         lbl_sec1 = tk.Label(
@@ -395,26 +438,29 @@ class SettleUpDialog(tk.Toplevel):
         lbl_sec1.pack(anchor="w", pady=(2, 4))
 
         table_frame = tk.Frame(content_frame, bg="#FFFFFF", bd=1, relief="solid")
-        table_frame.pack(fill=tk.BOTH, expand=True)
+        table_frame.pack(fill=tk.X, pady=(0, 6))
+
+        table_frame.grid_rowconfigure(0, weight=1)
+        table_frame.grid_columnconfigure(0, weight=1)
 
         columns = ("name", "paid", "share", "net", "status")
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=5)
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=4)
         self.tree.heading("name", text="Student Name", anchor="w")
         self.tree.heading("paid", text="Total Paid (₹)", anchor="e")
         self.tree.heading("share", text="Fair Share (₹)", anchor="e")
         self.tree.heading("net", text="Net Balance (₹)", anchor="e")
         self.tree.heading("status", text="Status", anchor="center")
 
-        self.tree.column("name", width=180, anchor="w")
-        self.tree.column("paid", width=110, anchor="e")
-        self.tree.column("share", width=110, anchor="e")
-        self.tree.column("net", width=120, anchor="e")
-        self.tree.column("status", width=180, anchor="center")
+        self.tree.column("name", width=160, anchor="w")
+        self.tree.column("paid", width=100, anchor="e")
+        self.tree.column("share", width=100, anchor="e")
+        self.tree.column("net", width=110, anchor="e")
+        self.tree.column("status", width=160, anchor="center")
 
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
 
         self.tree.tag_configure("positive", foreground="#059669", font=("Segoe UI", 9, "bold"))
         self.tree.tag_configure("negative", foreground="#DC2626", font=("Segoe UI", 9, "bold"))
@@ -425,11 +471,11 @@ class SettleUpDialog(tk.Toplevel):
             share_str = f"₹ {data['fair_share']:,.2f}"
             net = data["net_balance"]
 
-            if net > 0.01:
+            if net > 0.009:
                 net_str = f"+₹ {net:,.2f}"
                 status_str = f"🟢 Gets back ₹{net:,.2f}"
                 tag = "positive"
-            elif net < -0.01:
+            elif net < -0.009:
                 net_str = f"-₹ {abs(net):,.2f}"
                 status_str = f"🔴 Owes ₹{abs(net):,.2f}"
                 tag = "negative"
@@ -448,9 +494,9 @@ class SettleUpDialog(tk.Toplevel):
             fg="#1E293B",
             bg="#F8FAFC"
         )
-        lbl_sec2.pack(anchor="w", pady=(10, 4))
+        lbl_sec2.pack(anchor="w", pady=(4, 4))
 
-        settle_box = tk.Frame(content_frame, bg="#FFFFFF", bd=1, relief="solid", padx=10, pady=8)
+        settle_box = tk.Frame(content_frame, bg="#FFFFFF", bd=1, relief="solid", padx=8, pady=6)
         settle_box.pack(fill=tk.BOTH, expand=True)
 
         if not self.transactions:
@@ -475,26 +521,26 @@ class SettleUpDialog(tk.Toplevel):
             settle_vsb.pack(side=tk.RIGHT, fill=tk.Y)
 
             for idx, tx in enumerate(self.transactions, 1):
-                row_f = tk.Frame(settle_inner, bg="#F8FAFC", bd=1, relief="solid", padx=10, pady=6)
-                row_f.pack(fill=tk.X, expand=True, pady=3)
+                row_f = tk.Frame(settle_inner, bg="#F8FAFC", bd=1, relief="solid", padx=8, pady=5)
+                row_f.pack(fill=tk.X, expand=True, pady=2)
 
                 step_lbl = tk.Label(row_f, text=f"Step {idx}", font=("Segoe UI", 8, "bold"), fg="#64748B", bg="#F8FAFC")
-                step_lbl.pack(side=tk.LEFT, padx=(0, 10))
+                step_lbl.pack(side=tk.LEFT, padx=(0, 8))
 
-                payer_lbl = tk.Label(row_f, text=tx["from"], font=("Segoe UI", 10, "bold"), fg="#DC2626", bg="#F8FAFC")
+                payer_lbl = tk.Label(row_f, text=tx["from"], font=("Segoe UI", 9, "bold"), fg="#DC2626", bg="#F8FAFC")
                 payer_lbl.pack(side=tk.LEFT)
 
-                arrow_lbl = tk.Label(row_f, text="  ➔  pays  ➔  ", font=("Segoe UI", 9), fg="#64748B", bg="#F8FAFC")
+                arrow_lbl = tk.Label(row_f, text="  ➔  pays  ➔  ", font=("Segoe UI", 8), fg="#64748B", bg="#F8FAFC")
                 arrow_lbl.pack(side=tk.LEFT)
 
-                payee_lbl = tk.Label(row_f, text=tx["to"], font=("Segoe UI", 10, "bold"), fg="#059669", bg="#F8FAFC")
+                payee_lbl = tk.Label(row_f, text=tx["to"], font=("Segoe UI", 9, "bold"), fg="#059669", bg="#F8FAFC")
                 payee_lbl.pack(side=tk.LEFT)
 
-                amt_lbl = tk.Label(row_f, text=f"₹ {tx['amount']:,.2f}", font=("Segoe UI", 10, "bold"), fg="#1E3A8A", bg="#F8FAFC")
+                amt_lbl = tk.Label(row_f, text=f"₹ {tx['amount']:,.2f}", font=("Segoe UI", 9, "bold"), fg="#1E3A8A", bg="#F8FAFC")
                 amt_lbl.pack(side=tk.RIGHT)
 
         # Bottom Button Bar
-        btn_bar = tk.Frame(self, bg="#E2E8F0", padx=16, pady=10)
+        btn_bar = tk.Frame(self, bg="#E2E8F0", padx=14, pady=8)
         btn_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
         copy_btn = tk.Button(
@@ -506,8 +552,8 @@ class SettleUpDialog(tk.Toplevel):
             activebackground="#1D4ED8",
             activeforeground="#FFFFFF",
             relief="flat",
-            padx=12,
-            pady=5,
+            padx=10,
+            pady=4,
             cursor="hand2",
             command=self.copy_to_clipboard
         )
@@ -515,15 +561,15 @@ class SettleUpDialog(tk.Toplevel):
 
         export_txt_btn = tk.Button(
             btn_bar,
-            text="💾 Save Settlement Report (.txt)",
+            text="💾 Save Report (.txt)",
             font=("Segoe UI", 9),
             bg="#FFFFFF",
             fg="#1E293B",
             activebackground="#F1F5F9",
             relief="solid",
             bd=1,
-            padx=10,
-            pady=5,
+            padx=8,
+            pady=4,
             cursor="hand2",
             command=self.save_txt_report
         )
@@ -538,8 +584,8 @@ class SettleUpDialog(tk.Toplevel):
             activebackground="#F1F5F9",
             relief="solid",
             bd=1,
-            padx=16,
-            pady=5,
+            padx=14,
+            pady=4,
             cursor="hand2",
             command=self.destroy
         )
@@ -578,7 +624,7 @@ class SettleUpDialog(tk.Toplevel):
         return "\n".join(lines)
 
     def copy_to_clipboard(self):
-        """Copies the formatted settlement summary to OS clipboard."""
+        """Copies formatted settlement summary to OS clipboard."""
         report = self.generate_report_text()
         self.clipboard_clear()
         self.clipboard_append(report)
@@ -613,12 +659,12 @@ class CampusExpenseApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Campus Expense & Split Tracker")
-        self.geometry("1140x760")
-        self.minsize(980, 640)
+        self.geometry("1000x650")
+        self.minsize(850, 550)
         self.configure(bg="#F1F5F9")
 
         # Center on screen
-        self.center_window(1140, 760)
+        self.center_window(1000, 650)
 
         # Database Manager
         self.db = DatabaseManager(DB_FILENAME)
@@ -647,9 +693,11 @@ class CampusExpenseApp(tk.Tk):
         self.update_idletasks()
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        x = max(0, (sw - width) // 2)
-        y = max(0, (sh - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        w = min(width, sw - 40)
+        h = min(height, sh - 80)
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     def setup_styles(self):
         """Applies clam theme and high-contrast styling."""
@@ -678,26 +726,28 @@ class CampusExpenseApp(tk.Tk):
             "TLabelframe.Label",
             background=bg_surface,
             foreground="#1E293B",
-            font=("Segoe UI", 10, "bold")
+            font=("Segoe UI", 9, "bold")
         )
 
         # Labels
-        self.style.configure("TLabel", background="#F1F5F9", foreground=fg_text, font=("Segoe UI", 10))
-        self.style.configure("Surface.TLabel", background=bg_surface, foreground=fg_text, font=("Segoe UI", 10))
+        self.style.configure("TLabel", background="#F1F5F9", foreground=fg_text, font=("Segoe UI", 9))
+        self.style.configure("Surface.TLabel", background=bg_surface, foreground=fg_text, font=("Segoe UI", 9))
         self.style.configure("Form.TLabel", background=bg_surface, foreground="#334155", font=("Segoe UI", 9, "bold"))
 
-        # Buttons
+        # Buttons with explicit reliefs and active mappings
         self.style.configure(
             "Primary.TButton",
             font=("Segoe UI", 9, "bold"),
             background="#2563EB",
             foreground="#FFFFFF",
-            padding=(12, 6),
-            relief="flat"
+            padding=(10, 5),
+            relief="flat",
+            borderwidth=0
         )
         self.style.map(
             "Primary.TButton",
-            background=[("active", "#1D4ED8"), ("pressed", "#1E40AF")]
+            background=[("pressed", "#1E40AF"), ("active", "#1D4ED8"), ("disabled", "#94A3B8")],
+            foreground=[("disabled", "#F1F5F9")]
         )
 
         self.style.configure(
@@ -705,13 +755,15 @@ class CampusExpenseApp(tk.Tk):
             font=("Segoe UI", 9),
             background="#FFFFFF",
             foreground="#1E293B",
-            padding=(10, 5),
+            padding=(8, 4),
             relief="solid",
-            borderwidth=1
+            borderwidth=1,
+            bordercolor="#CBD5E1"
         )
         self.style.map(
             "Secondary.TButton",
-            background=[("active", "#F8FAFC"), ("pressed", "#E2E8F0")]
+            background=[("pressed", "#E2E8F0"), ("active", "#F8FAFC")],
+            foreground=[("active", "#0F172A")]
         )
 
         self.style.configure(
@@ -719,12 +771,14 @@ class CampusExpenseApp(tk.Tk):
             font=("Segoe UI", 9, "bold"),
             background="#DC2626",
             foreground="#FFFFFF",
-            padding=(10, 5),
-            relief="flat"
+            padding=(8, 4),
+            relief="flat",
+            borderwidth=0
         )
         self.style.map(
             "Danger.TButton",
-            background=[("active", "#B91C1C"), ("pressed", "#991B1B")]
+            background=[("pressed", "#991B1B"), ("active", "#B91C1C"), ("disabled", "#FCA5A5")],
+            foreground=[("disabled", "#FFFFFF")]
         )
 
         self.style.configure(
@@ -732,12 +786,14 @@ class CampusExpenseApp(tk.Tk):
             font=("Segoe UI", 9, "bold"),
             background="#059669",
             foreground="#FFFFFF",
-            padding=(10, 5),
-            relief="flat"
+            padding=(8, 4),
+            relief="flat",
+            borderwidth=0
         )
         self.style.map(
             "Success.TButton",
-            background=[("active", "#047857"), ("pressed", "#065F46")]
+            background=[("pressed", "#065F46"), ("active", "#047857"), ("disabled", "#6EE7B7")],
+            foreground=[("disabled", "#FFFFFF")]
         )
 
         self.style.configure(
@@ -745,12 +801,14 @@ class CampusExpenseApp(tk.Tk):
             font=("Segoe UI", 9, "bold"),
             background="#7C3AED",
             foreground="#FFFFFF",
-            padding=(12, 6),
-            relief="flat"
+            padding=(10, 5),
+            relief="flat",
+            borderwidth=0
         )
         self.style.map(
             "Purple.TButton",
-            background=[("active", "#6D28D9"), ("pressed", "#5B21B6")]
+            background=[("pressed", "#5B21B6"), ("active", "#6D28D9"), ("disabled", "#C4B5FD")],
+            foreground=[("disabled", "#FFFFFF")]
         )
 
         # Treeview styling
@@ -758,9 +816,9 @@ class CampusExpenseApp(tk.Tk):
             "Treeview",
             background=bg_surface,
             foreground=fg_text,
-            rowheight=28,
+            rowheight=26,
             fieldbackground=bg_surface,
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 9),
             bordercolor="#CBD5E1",
             borderwidth=1
         )
@@ -776,20 +834,22 @@ class CampusExpenseApp(tk.Tk):
             foreground="#0F172A",
             font=("Segoe UI", 9, "bold"),
             relief="flat",
-            padding=(6, 6)
+            padding=(5, 5),
+            bordercolor="#CBD5E1"
         )
         self.style.map(
             "Treeview.Heading",
-            background=[("active", "#CBD5E1")]
+            background=[("active", "#CBD5E1")],
+            foreground=[("active", "#0F172A")]
         )
 
         # Combobox, Entry, Spinbox styling
-        self.style.configure("TCombobox", padding=4)
-        self.style.configure("TEntry", padding=4)
-        self.style.configure("TSpinbox", padding=4)
+        self.style.configure("TCombobox", padding=3)
+        self.style.configure("TEntry", padding=3)
+        self.style.configure("TSpinbox", padding=3)
 
     def build_ui(self):
-        """Constructs the complete application layout."""
+        """Constructs the complete application layout using pure pack at the root."""
         # 1. Header Banner
         self.build_header()
 
@@ -797,7 +857,7 @@ class CampusExpenseApp(tk.Tk):
         self.build_kpi_dashboard()
 
         # 3. Main Body Frame (Input Form + Data Table with Filters)
-        body_frame = tk.Frame(self, bg="#F1F5F9", padx=16, pady=4)
+        body_frame = tk.Frame(self, bg="#F1F5F9", padx=12, pady=2)
         body_frame.pack(fill=tk.BOTH, expand=True)
 
         # Input Form (LabelFrame)
@@ -814,7 +874,7 @@ class CampusExpenseApp(tk.Tk):
 
     def build_header(self):
         """Creates presentation header bar with app branding."""
-        header_frame = tk.Frame(self, bg="#0F172A", padx=20, pady=12)
+        header_frame = tk.Frame(self, bg="#0F172A", padx=16, pady=10)
         header_frame.pack(fill=tk.X)
 
         left_box = tk.Frame(header_frame, bg="#0F172A")
@@ -823,7 +883,7 @@ class CampusExpenseApp(tk.Tk):
         app_title = tk.Label(
             left_box,
             text="🎓 Campus Expense & Split Tracker",
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 15, "bold"),
             fg="#FFFFFF",
             bg="#0F172A"
         )
@@ -831,12 +891,12 @@ class CampusExpenseApp(tk.Tk):
 
         app_sub = tk.Label(
             left_box,
-            text="Effortless shared budget tracking & automated student debt settlement",
-            font=("Segoe UI", 9),
+            text="Shared budget tracking, category breakdown & optimal student debt settlement",
+            font=("Segoe UI", 8),
             fg="#94A3B8",
             bg="#0F172A"
         )
-        app_sub.pack(anchor="w", pady=(2, 0))
+        app_sub.pack(anchor="w", pady=(1, 0))
 
         # Right side info pill
         right_box = tk.Frame(header_frame, bg="#0F172A")
@@ -845,84 +905,83 @@ class CampusExpenseApp(tk.Tk):
         db_badge = tk.Label(
             right_box,
             text="● SQLite: campus_expenses.db",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             fg="#10B981",
             bg="#1E293B",
-            padx=10,
-            pady=4,
+            padx=8,
+            pady=3,
             relief="flat"
         )
         db_badge.pack(anchor="e")
 
     def build_kpi_dashboard(self):
         """Builds 3 modern high-contrast KPI cards."""
-        dash_container = tk.Frame(self, bg="#F1F5F9", padx=16, pady=4)
-        dash_container.pack(fill=tk.X, pady=(6, 2))
+        dash_container = tk.Frame(self, bg="#F1F5F9", padx=12, pady=2)
+        dash_container.pack(fill=tk.X, pady=(4, 2))
 
         # Card 1: Total Group Spend
-        c1 = tk.Frame(dash_container, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=10)
-        c1.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+        c1 = tk.Frame(dash_container, bg="#FFFFFF", bd=1, relief="solid", padx=12, pady=8)
+        c1.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
         tk.Label(c1, text="TOTAL GROUP SPEND", font=("Segoe UI", 8, "bold"), fg="#2563EB", bg="#FFFFFF").pack(anchor="w")
-        self.kpi_spend_val = tk.Label(c1, text="₹ 0.00", font=("Segoe UI", 16, "bold"), fg="#0F172A", bg="#FFFFFF")
-        self.kpi_spend_val.pack(anchor="w", pady=(3, 0))
+        self.kpi_spend_val = tk.Label(c1, text="₹ 0.00", font=("Segoe UI", 15, "bold"), fg="#0F172A", bg="#FFFFFF")
+        self.kpi_spend_val.pack(anchor="w", pady=(2, 0))
         tk.Label(c1, text="Combined spending across group", font=("Segoe UI", 8), fg="#64748B", bg="#FFFFFF").pack(anchor="w")
 
         # Card 2: Total Transactions
-        c2 = tk.Frame(dash_container, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=10)
-        c2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4)
+        c2 = tk.Frame(dash_container, bg="#FFFFFF", bd=1, relief="solid", padx=12, pady=8)
+        c2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
         tk.Label(c2, text="TOTAL TRANSACTIONS", font=("Segoe UI", 8, "bold"), fg="#059669", bg="#FFFFFF").pack(anchor="w")
-        self.kpi_tx_val = tk.Label(c2, text="0 Records", font=("Segoe UI", 16, "bold"), fg="#0F172A", bg="#FFFFFF")
-        self.kpi_tx_val.pack(anchor="w", pady=(3, 0))
+        self.kpi_tx_val = tk.Label(c2, text="0 Records", font=("Segoe UI", 15, "bold"), fg="#0F172A", bg="#FFFFFF")
+        self.kpi_tx_val.pack(anchor="w", pady=(2, 0))
         tk.Label(c2, text="Logged student expense items", font=("Segoe UI", 8), fg="#64748B", bg="#FFFFFF").pack(anchor="w")
 
         # Card 3: Highest Spend Category
-        c3 = tk.Frame(dash_container, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=10)
-        c3.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0))
+        c3 = tk.Frame(dash_container, bg="#FFFFFF", bd=1, relief="solid", padx=12, pady=8)
+        c3.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
         tk.Label(c3, text="HIGHEST EXPENSE CATEGORY", font=("Segoe UI", 8, "bold"), fg="#D97706", bg="#FFFFFF").pack(anchor="w")
-        self.kpi_cat_val = tk.Label(c3, text="N/A", font=("Segoe UI", 15, "bold"), fg="#0F172A", bg="#FFFFFF")
-        self.kpi_cat_val.pack(anchor="w", pady=(3, 0))
+        self.kpi_cat_val = tk.Label(c3, text="N/A", font=("Segoe UI", 14, "bold"), fg="#0F172A", bg="#FFFFFF")
+        self.kpi_cat_val.pack(anchor="w", pady=(2, 0))
         tk.Label(c3, text="Top budget consumption", font=("Segoe UI", 8), fg="#64748B", bg="#FFFFFF").pack(anchor="w")
 
     def build_input_form(self, parent):
         """Constructs the clean grid input form inside a LabelFrame."""
-        form_frame = ttk.LabelFrame(parent, text=" ➕ Add New Expense ", padding=12)
-        form_frame.pack(fill=tk.X, pady=(4, 8))
+        form_frame = ttk.LabelFrame(parent, text=" ➕ Add New Expense ", padding=10)
+        form_frame.pack(fill=tk.X, pady=(2, 6))
 
-        # Grid column weights for responsive expansion
         for col in range(6):
             form_frame.columnconfigure(col, weight=1)
 
         # Row 0: Labels
-        ttk.Label(form_frame, text="Item / Place Description *", style="Form.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 2))
-        ttk.Label(form_frame, text="Category *", style="Form.TLabel").grid(row=0, column=2, sticky="w", padx=6, pady=(0, 2))
-        ttk.Label(form_frame, text="Amount in ₹ *", style="Form.TLabel").grid(row=0, column=3, sticky="w", padx=6, pady=(0, 2))
-        ttk.Label(form_frame, text="Paid By (Student Name) *", style="Form.TLabel").grid(row=0, column=4, sticky="w", padx=6, pady=(0, 2))
-        ttk.Label(form_frame, text="Split Between (1-20) *", style="Form.TLabel").grid(row=0, column=5, sticky="w", padx=6, pady=(0, 2))
+        ttk.Label(form_frame, text="Item / Place Description *", style="Form.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 2))
+        ttk.Label(form_frame, text="Category *", style="Form.TLabel").grid(row=0, column=2, sticky="w", padx=4, pady=(0, 2))
+        ttk.Label(form_frame, text="Amount in ₹ *", style="Form.TLabel").grid(row=0, column=3, sticky="w", padx=4, pady=(0, 2))
+        ttk.Label(form_frame, text="Paid By (Student Name) *", style="Form.TLabel").grid(row=0, column=4, sticky="w", padx=4, pady=(0, 2))
+        ttk.Label(form_frame, text="Split Between (1-20) *", style="Form.TLabel").grid(row=0, column=5, sticky="w", padx=4, pady=(0, 2))
 
         # Row 1: Entry Controls
-        self.ent_item = ttk.Entry(form_frame, font=("Segoe UI", 10))
-        self.ent_item.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 8))
+        self.ent_item = ttk.Entry(form_frame, font=("Segoe UI", 9))
+        self.ent_item.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(0, 6))
 
-        self.combo_category = ttk.Combobox(form_frame, values=CATEGORIES, state="readonly", font=("Segoe UI", 10))
+        self.combo_category = ttk.Combobox(form_frame, values=CATEGORIES, state="readonly", font=("Segoe UI", 9))
         self.combo_category.set("Food")
-        self.combo_category.grid(row=1, column=2, sticky="ew", padx=6, pady=(0, 8))
+        self.combo_category.grid(row=1, column=2, sticky="ew", padx=4, pady=(0, 6))
 
-        self.ent_amount = ttk.Entry(form_frame, font=("Segoe UI", 10))
-        self.ent_amount.grid(row=1, column=3, sticky="ew", padx=6, pady=(0, 8))
+        self.ent_amount = ttk.Entry(form_frame, font=("Segoe UI", 9))
+        self.ent_amount.grid(row=1, column=3, sticky="ew", padx=4, pady=(0, 6))
 
-        self.combo_paid_by = ttk.Combobox(form_frame, font=("Segoe UI", 10))
-        self.combo_paid_by.grid(row=1, column=4, sticky="ew", padx=6, pady=(0, 8))
+        self.combo_paid_by = ttk.Combobox(form_frame, font=("Segoe UI", 9))
+        self.combo_paid_by.grid(row=1, column=4, sticky="ew", padx=4, pady=(0, 6))
 
-        self.spin_split = ttk.Spinbox(form_frame, from_=1, to=20, font=("Segoe UI", 10), justify="center")
+        self.spin_split = ttk.Spinbox(form_frame, from_=1, to=20, font=("Segoe UI", 9), justify="center")
         self.spin_split.set(4)
-        self.spin_split.grid(row=1, column=5, sticky="ew", padx=6, pady=(0, 8))
+        self.spin_split.grid(row=1, column=5, sticky="ew", padx=4, pady=(0, 6))
 
         # Row 2: Form Action Buttons
         btn_container = tk.Frame(form_frame, bg="#FFFFFF")
-        btn_container.grid(row=2, column=0, columnspan=6, sticky="e", padx=6, pady=(4, 0))
+        btn_container.grid(row=2, column=0, columnspan=6, sticky="e", padx=4, pady=(2, 0))
 
         btn_clear = ttk.Button(btn_container, text="🧹 Clear Fields", style="Secondary.TButton", command=self.clear_form)
-        btn_clear.pack(side=tk.RIGHT, padx=(8, 0))
+        btn_clear.pack(side=tk.RIGHT, padx=(6, 0))
 
         btn_add = ttk.Button(btn_container, text="➕ Add Expense", style="Primary.TButton", command=self.on_add_expense)
         btn_add.pack(side=tk.RIGHT)
@@ -934,23 +993,23 @@ class CampusExpenseApp(tk.Tk):
 
     def build_filter_bar(self, parent):
         """Constructs search and category filtering controls."""
-        filter_frame = tk.Frame(parent, bg="#F1F5F9", pady=4)
+        filter_frame = tk.Frame(parent, bg="#F1F5F9", pady=3)
         filter_frame.pack(fill=tk.X)
 
         # Real-time Search Box
         tk.Label(filter_frame, text="🔍 Search:", font=("Segoe UI", 9, "bold"), fg="#334155", bg="#F1F5F9").pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *args: self.load_expenses())
-        self.ent_search = ttk.Entry(filter_frame, textvariable=self.search_var, width=24, font=("Segoe UI", 9))
-        self.ent_search.pack(side=tk.LEFT, padx=(6, 16))
+        self.ent_search = ttk.Entry(filter_frame, textvariable=self.search_var, width=22, font=("Segoe UI", 9))
+        self.ent_search.pack(side=tk.LEFT, padx=(4, 12))
 
         # Filter by Category Combobox
         tk.Label(filter_frame, text="📁 Category Filter:", font=("Segoe UI", 9, "bold"), fg="#334155", bg="#F1F5F9").pack(side=tk.LEFT)
         filter_options = ["All Categories"] + CATEGORIES
-        self.combo_filter_cat = ttk.Combobox(filter_frame, values=filter_options, state="readonly", width=16, font=("Segoe UI", 9))
+        self.combo_filter_cat = ttk.Combobox(filter_frame, values=filter_options, state="readonly", width=15, font=("Segoe UI", 9))
         self.combo_filter_cat.set("All Categories")
         self.combo_filter_cat.bind("<<ComboboxSelected>>", lambda e: self.load_expenses())
-        self.combo_filter_cat.pack(side=tk.LEFT, padx=(6, 12))
+        self.combo_filter_cat.pack(side=tk.LEFT, padx=(4, 8))
 
         # Reset Filter Button
         btn_reset = ttk.Button(filter_frame, text="Reset", style="Secondary.TButton", command=self.reset_filters)
@@ -960,50 +1019,55 @@ class CampusExpenseApp(tk.Tk):
         self.lbl_record_count = tk.Label(
             filter_frame,
             text="Showing 0 records",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             fg="#64748B",
             bg="#F1F5F9"
         )
         self.lbl_record_count.pack(side=tk.RIGHT)
 
     def build_data_table(self, parent):
-        """Constructs the ttk.Treeview data table with scrollbar and sorting."""
+        """Constructs the ttk.Treeview data table with both horizontal & vertical scrollbars."""
         table_container = tk.Frame(parent, bg="#FFFFFF", bd=1, relief="solid")
-        table_container.pack(fill=tk.BOTH, expand=True, pady=(4, 6))
+        table_container.pack(fill=tk.BOTH, expand=True, pady=(2, 4))
+
+        # Grid manager inside table_container ensures neat corners between scrollbars
+        table_container.grid_rowconfigure(0, weight=1)
+        table_container.grid_columnconfigure(0, weight=1)
 
         columns = ("id", "date", "item", "category", "amount", "paid_by", "split", "each_owes")
         self.tree = ttk.Treeview(table_container, columns=columns, show="headings", selectmode="browse")
 
         col_defs = [
-            ("id", "ID", 50, "center"),
-            ("date", "Date", 95, "center"),
-            ("item", "Item / Place", 240, "w"),
-            ("category", "Category", 125, "center"),
-            ("amount", "Total (₹)", 115, "e"),
-            ("paid_by", "Paid By", 150, "w"),
-            ("split", "Split", 75, "center"),
-            ("each_owes", "Each Owes (₹)", 125, "e")
+            ("id", "ID", 45, 35, "center"),
+            ("date", "Date", 90, 75, "center"),
+            ("item", "Item / Place", 210, 130, "w"),
+            ("category", "Category", 115, 90, "center"),
+            ("amount", "Total (₹)", 105, 80, "e"),
+            ("paid_by", "Paid By", 130, 95, "w"),
+            ("split", "Split", 65, 50, "center"),
+            ("each_owes", "Each Owes (₹)", 110, 85, "e")
         ]
 
-        for col_id, heading_text, width, anchor in col_defs:
+        for col_id, heading_text, width, minw, anchor in col_defs:
             self.tree.heading(
                 col_id,
                 text=heading_text,
                 anchor=anchor,
                 command=lambda c=col_id: self.sort_tree_column(c)
             )
-            self.tree.column(col_id, width=width, minwidth=40, anchor=anchor)
+            self.tree.column(col_id, width=width, minwidth=minw, anchor=anchor)
 
-        # Vertical Scrollbar
         vsb = ttk.Scrollbar(table_container, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vsb.set)
+        hsb = ttk.Scrollbar(table_container, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
 
-        # Alternating Row Striping
-        self.tree.tag_configure("oddrow", background="#FFFFFF")
-        self.tree.tag_configure("evenrow", background="#F8FAFC")
+        # Alternating Row Striping with explicit foreground for high contrast
+        self.tree.tag_configure("oddrow", background="#FFFFFF", foreground="#0F172A")
+        self.tree.tag_configure("evenrow", background="#F8FAFC", foreground="#0F172A")
 
         # Shortcuts: Delete key to delete row, double click for details inspector
         self.tree.bind("<Delete>", lambda e: self.on_delete_selected())
@@ -1011,7 +1075,7 @@ class CampusExpenseApp(tk.Tk):
 
     def build_action_bar(self):
         """Constructs bottom action bar with Delete, CSV Export, and Settle Up buttons."""
-        bar = tk.Frame(self, bg="#FFFFFF", bd=1, relief="solid", padx=16, pady=10)
+        bar = tk.Frame(self, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=8)
         bar.pack(fill=tk.X, side=tk.BOTTOM)
 
         # Left: Live status label
@@ -1026,10 +1090,10 @@ class CampusExpenseApp(tk.Tk):
 
         # Right: Action Buttons
         settle_btn = ttk.Button(bar, text="🤝 Settle Up Summary", style="Purple.TButton", command=self.open_settle_up_modal)
-        settle_btn.pack(side=tk.RIGHT, padx=(8, 0))
+        settle_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
         export_btn = ttk.Button(bar, text="📥 Export to CSV", style="Success.TButton", command=self.export_to_csv)
-        export_btn.pack(side=tk.RIGHT, padx=8)
+        export_btn.pack(side=tk.RIGHT, padx=6)
 
         del_btn = ttk.Button(bar, text="🗑️ Delete Selected", style="Danger.TButton", command=self.on_delete_selected)
         del_btn.pack(side=tk.RIGHT)
@@ -1038,43 +1102,56 @@ class CampusExpenseApp(tk.Tk):
     # LOGIC & EVENT HANDLERS
     # ==========================================================================
     def on_add_expense(self):
-        """Validates inputs and adds an expense to SQLite3."""
+        """Validates inputs with full protection against blanks, non-numbers, negative, 0, inf, and nan."""
         item = self.ent_item.get().strip()
         category = self.combo_category.get().strip()
         amount_raw = self.ent_amount.get().strip()
-        paid_by = self.combo_paid_by.get().strip()
+        paid_by = " ".join(self.combo_paid_by.get().split())
         split_raw = self.spin_split.get().strip()
 
-        # Input Validation with messagebox alerts
+        # Item validation
         if not item:
             messagebox.showwarning("Validation Error", "Please enter an Item or Place description.\n(e.g., 'Subway Sandwich', 'Auto Rickshaw').")
             self.ent_item.focus_set()
             return
 
+        if len(item) > 100:
+            item = item[:100]
+
+        # Category validation
         if not category or category not in CATEGORIES:
             messagebox.showwarning("Validation Error", f"Please select a valid Category from:\n{', '.join(CATEGORIES)}")
             self.combo_category.focus_set()
             return
 
-        if not amount_raw:
+        # Amount validation: handles currency symbols, commas, nan, inf, zero, negative
+        amount_clean = amount_raw.replace("₹", "").replace("Rs.", "").replace("Rs", "").replace(",", "").strip()
+        if not amount_clean:
             messagebox.showwarning("Validation Error", "Please enter the expense Amount in ₹.")
             self.ent_amount.focus_set()
             return
 
         try:
-            amount = float(amount_raw)
-            if amount <= 0:
-                raise ValueError("Amount must be positive.")
+            amount = float(amount_clean)
+            if math.isnan(amount) or math.isinf(amount) or amount <= 0:
+                raise ValueError("Amount must be a positive finite number.")
+            if amount > 10_000_000:
+                raise ValueError("Amount cannot exceed ₹ 10,000,000.00.")
         except ValueError:
             messagebox.showerror("Validation Error", "Invalid Amount! Please enter a valid positive number.\n(e.g., 250 or 49.50)")
             self.ent_amount.focus_set()
             return
 
+        # Paid By validation
         if not paid_by:
             messagebox.showwarning("Validation Error", "Please specify who paid for this expense.")
             self.combo_paid_by.focus_set()
             return
 
+        if len(paid_by) > 60:
+            paid_by = paid_by[:60]
+
+        # Split Count validation
         try:
             split_count = int(split_raw)
             if split_count < 1 or split_count > 20:
@@ -1086,7 +1163,11 @@ class CampusExpenseApp(tk.Tk):
 
         # Insert into database
         today = datetime.now().strftime("%Y-%m-%d")
-        new_id = self.db.add_expense(item, category, round(amount, 2), paid_by, split_count, today)
+        try:
+            new_id = self.db.add_expense(item, category, round(amount, 2), paid_by, split_count, today)
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Failed to save expense:\n{str(e)}")
+            return
 
         # UI updates
         self.clear_form()
@@ -1112,7 +1193,6 @@ class CampusExpenseApp(tk.Tk):
 
     def load_expenses(self):
         """Queries the database and populates the Treeview."""
-        # Clear existing rows
         for item in self.tree.get_children():
             self.tree.delete(item)
 
@@ -1124,7 +1204,7 @@ class CampusExpenseApp(tk.Tk):
         for idx, row in enumerate(rows):
             amount = row["amount"]
             split = row["split_count"]
-            each_owes = (amount / split) if split > 0 else 0.0
+            each_owes = round(amount / split, 2) if split > 0 else 0.0
             cat_display = CATEGORY_DISPLAY.get(row["category"], row["category"])
 
             tag = "evenrow" if idx % 2 == 0 else "oddrow"
@@ -1173,6 +1253,9 @@ class CampusExpenseApp(tk.Tk):
 
         item_id = selected[0]
         row_values = self.tree.item(item_id, "values")
+        if not row_values or len(row_values) < 6:
+            return
+
         item_name = row_values[2]
         amount_str = row_values[4]
         payer = row_values[5]
@@ -1203,6 +1286,9 @@ class CampusExpenseApp(tk.Tk):
         if not item_id:
             return
         vals = self.tree.item(item_id, "values")
+        if not vals or len(vals) < 8:
+            return
+
         detail_msg = (
             f"Expense Details (ID: {vals[0]})\n"
             f"{'='*38}\n"
@@ -1218,8 +1304,11 @@ class CampusExpenseApp(tk.Tk):
 
     def sort_tree_column(self, col):
         """Sorts Treeview rows when clicking a column header."""
-        items = [(self.tree.set(k, col), k) for k in self.tree.get_children("")]
+        children = self.tree.get_children("")
+        if not children:
+            return
 
+        items = [(self.tree.set(k, col), k) for k in children]
         reverse = self.sort_state.get(col, False)
 
         def convert_val(val_tuple):
@@ -1253,12 +1342,15 @@ class CampusExpenseApp(tk.Tk):
         self.sort_state[col] = not reverse
 
     def export_to_csv(self):
-        """Exports all current records to 'expenses_report.csv'."""
+        """Exports currently filtered or all records to 'expenses_report.csv'."""
         default_path = os.path.abspath(CSV_DEFAULT_FILENAME)
         try:
-            records = self.db.get_expenses(category_filter="All", search_query="")
+            category_filter = self.combo_filter_cat.get()
+            search_query = self.search_var.get()
+            records = self.db.get_expenses(category_filter=category_filter, search_query=search_query)
+
             if not records:
-                messagebox.showinfo("No Data", "There are no expenses in the database to export.")
+                messagebox.showinfo("No Data to Export", "There are no expenses matching the current view to export.")
                 return
 
             with open(default_path, mode="w", newline="", encoding="utf-8") as f:
@@ -1279,7 +1371,7 @@ class CampusExpenseApp(tk.Tk):
                 for r in records:
                     amt = r["amount"]
                     split = r["split_count"]
-                    each = (amt / split) if split > 0 else 0.0
+                    each = round(amt / split, 2) if split > 0 else 0.0
                     total_spend += amt
                     writer.writerow([
                         r["id"],
@@ -1294,7 +1386,7 @@ class CampusExpenseApp(tk.Tk):
 
                 # Summary Row
                 writer.writerow([])
-                writer.writerow(["", "", "", "TOTAL GROUP SPEND", f"{total_spend:.2f}", "", "", ""])
+                writer.writerow(["", "", "", "TOTAL SPEND", f"{total_spend:.2f}", "", "", ""])
 
             self.status_lbl.configure(text=f"✓ Exported {len(records)} records to {os.path.basename(default_path)}")
             messagebox.showinfo(
@@ -1302,7 +1394,7 @@ class CampusExpenseApp(tk.Tk):
                 f"Expenses successfully exported to CSV!\n\n"
                 f"• File: {default_path}\n"
                 f"• Total Records: {len(records)}\n"
-                f"• Total Group Spend: ₹ {total_spend:,.2f}"
+                f"• Exported Spend: ₹ {total_spend:,.2f}"
             )
         except Exception as e:
             messagebox.showerror("Export Error", f"Failed to export CSV:\n{str(e)}")

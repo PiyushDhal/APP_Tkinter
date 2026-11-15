@@ -11,6 +11,7 @@ A presentation-ready, high-contrast desktop application built in Python using **
 - **Presentation-Grade Modern UI:**
   - Styled with the modern `ttk` `'clam'` theme.
   - Windows High-DPI awareness enabled for razor-sharp typography and crisp borders on classroom projectors and 4K displays.
+  - Optimized projector resolution: Default geometry **`1000x650`** with a responsive **`minsize(850, 550)`** so widgets never clip on compact screens.
   - High-contrast color palette: Deep navy header (`#0F172A`), clean cards, vibrant category badges, and distinct status indicators.
 - **Live Summary Dashboard Bar:**
   - **Total Group Spend (₹):** Live sum of all expenses.
@@ -18,23 +19,24 @@ A presentation-ready, high-contrast desktop application built in Python using **
   - **Highest Expense Category:** Dynamically identified top budget drain with amount.
 - **Robust Input Form:**
   - Inputs: Item / Place, Category (readonly combobox), Amount in ₹, Paid By (with auto-suggest from previous payers), and Split Between (1 to 20 spinbox).
-  - Comprehensive input validation with informative `messagebox` alerts.
+  - Multi-tier input validation: Guards against empty strings, currency symbols, commas, non-numeric values, negative numbers, 0, `inf`, and `nan`.
 - **Real-Time Search & Category Filtering:**
   - Live search box filtering simultaneously across *Item / Place* and *Paid By*.
   - Category dropdown filter ("All Categories", "Food", "Travel", "Stationery", "Utilities", "Entertainment", "Other").
   - Instant record count counter.
 - **Data Table (`ttk.Treeview`):**
+  - Dual scrollbars: Both **Vertical** and **Horizontal** scrollbars embedded with clean grid alignments.
   - Alternating row striping (`#FFFFFF` and `#F8FAFC`).
   - Columns: `ID`, `Date`, `Item / Place`, `Category`, `Total (₹)`, `Paid By`, `Split`, and dynamically calculated **`Each Owes (₹)`** (`amount / split_count`).
   - Interactive column header sorting (ascending / descending with numeric precision).
   - Double-click inspector modal for full transaction inspection.
 - **Comprehensive Settle-Up Engine:**
-  - Modal window displaying individual contributions vs. fair share.
+  - Modal window displaying individual contributions vs. fair share with exact integer paise arithmetic (zero floating-point drift).
   - Color-coded balance status (🟢 Gets back ₹X vs. 🔴 Owes ₹Y).
   - **Optimal "Who Owes Whom" Plan:** Uses the greedy Min-Cash-Flow algorithm to resolve all debts in the absolute minimum number of peer-to-peer transfers.
   - One-click **"Copy to Clipboard"** for instant pasting into WhatsApp / group chats.
   - Save full settlement report to a formatted `.txt` file.
-- **CSV Data Export:** One-click export to `expenses_report.csv` complete with summary row.
+- **CSV Data Export:** One-click export to `expenses_report.csv` preserving active category/search filter views with summary row.
 
 ---
 
@@ -42,14 +44,14 @@ A presentation-ready, high-contrast desktop application built in Python using **
 
 ### Requirements
 - Python 3.8+ (Tested on Python 3.14 on Windows)
-- Standard library modules only (`tkinter`, `sqlite3`, `csv`, `datetime`, `os`, `sys`)
+- Standard library modules only (`tkinter`, `sqlite3`, `csv`, `datetime`, `os`, `sys`, `math`)
 
 ### Launch Application
 ```bash
 python main.py
 ```
 
-### Run Automated Test Suite
+### Run Automated Audit & Test Suite
 ```bash
 python test_app.py
 ```
@@ -75,17 +77,17 @@ The local database file is stored at `campus_expenses.db`.
 
 ## 📐 Settlement Mathematics (Who Owes Whom)
 
-The settlement window computes fair balances across group members:
+The settlement window computes fair balances across group members using exact integer paise arithmetic:
 
-1. **Total Group Spend:**
-   $$\text{Total} = \sum_{k} \text{amount}_k$$
+1. **Total Group Spend in Paise:**
+   $$\text{Total Paise} = \lfloor \text{Total} \times 100 \rceil$$
 
-2. **Fair Share per Student:**
-   $$\text{Share} = \frac{\text{Total}}{N}$$
+2. **Base Fair Share per Student:**
+   $$\text{Base} = \lfloor \text{Total Paise} / N \rfloor, \quad \text{Remainder} = \text{Total Paise} \pmod N$$
    *(where $N$ is the count of distinct students participating)*
 
 3. **Net Balance for Member $i$:**
-   $$\text{Balance}_i = \text{Paid}_i - \text{Share}$$
+   $$\text{Balance}_i = \text{Paid Paise}_i - \text{Share Paise}_i$$
    - If $\text{Balance}_i > 0$: Student paid more than their share $\rightarrow$ **Gets back money**
    - If $\text{Balance}_i < 0$: Student paid less than their share $\rightarrow$ **Owes money**
 
@@ -105,7 +107,7 @@ The settlement window computes fair balances across group members:
    - Select `"Food"` from the Category dropdown to show category-specific expenses.
    - Click **"Reset"** to restore all records.
 3. **Add New Expense:**
-   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `120`, Paid By: `Aarav Sharma`, Split: `4`.
+   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `₹ 120.00`, Paid By: `Aarav Sharma`, Split: `4`.
    - Show how the KPI summary cards instantly update, table row striping adjusts, and the status bar gives immediate feedback.
 4. **Column Sorting:** Click on `Total (₹)` or `Each Owes (₹)` to demonstrate ascending/descending sorting.
 5. **Settle Up Modal:**

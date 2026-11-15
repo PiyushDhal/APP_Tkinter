@@ -1,7 +1,4 @@
 ID,Date Added,Item / Place,Category,Total Amount (INR),Paid By,Split Count,Each Owes (INR)
-4,2026-11-15,Hostel Night Snacks,Food,240.00,Sneha Rao,4,60.00
-3,2026-11-15,Lab Manual & Xerox,Stationery,160.00,Rohan Gupta,4,40.00
-2,2026-11-15,Campus Uber Cab Fare,Travel,320.00,Priya Patel,4,80.00
-1,2026-11-15,Cafeteria Lunch Combo,Food,480.00,Aarav Sharma,4,120.00
+5,2026-11-15,Team Dinner,Food,1500.50,Rohan Gupta,4,375.12
 
-,,,TOTAL GROUP SPEND,1200.00,,,
+,,,TOTAL SPEND,1500.50,,,
