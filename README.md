@@ -1,4 +1,4 @@
-# Campus Expense and Split Tracker
+# 🎓 Campus Expense and Split Tracker
 
 A desktop application built with Python, Tkinter, and SQLite to help students and roommates track shared expenses, split costs, and calculate who owes whom.
 
