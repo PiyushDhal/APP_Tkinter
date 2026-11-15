@@ -672,8 +672,15 @@ class CampusExpenseApp(tk.Tk):
         # Configure TTK Styles
         self.setup_styles()
 
-        # Build UI Components
+        # Main Frames for Page Navigation
+        self.landing_frame = tk.Frame(self, bg="#F8FAFC")
+        self.tracker_frame = tk.Frame(self, bg="#F1F5F9")
+
+        # Build UI Components for Both Pages
         self.build_ui()
+
+        # Start on the Landing Page
+        self.show_landing_page()
 
         # Initial Load
         self.load_expenses()
@@ -681,7 +688,7 @@ class CampusExpenseApp(tk.Tk):
         self.refresh_payer_autocomplete()
 
         # Global Keybindings
-        self.bind("<Control-f>", lambda e: self.ent_search.focus_set())
+        self.bind("<Control-f>", lambda e: self.on_ctrl_f())
         self.bind("<Escape>", lambda e: self.reset_filters())
         self.bind("<Control-s>", lambda e: self.open_settle_up_modal())
         self.bind("<Control-e>", lambda e: self.export_to_csv())
@@ -845,16 +852,117 @@ class CampusExpenseApp(tk.Tk):
         self.style.configure("TEntry", padding=3)
         self.style.configure("TSpinbox", padding=3)
 
+    def show_landing_page(self):
+        """Transitions view to the presentation landing page."""
+        self.tracker_frame.pack_forget()
+        self.landing_frame.pack(fill=tk.BOTH, expand=True)
+        # Pressing Enter on landing page opens tracker
+        self.bind("<Return>", lambda e: self.show_tracker_page())
+
+    def show_tracker_page(self):
+        """Transitions view to the calculation and tracking dashboard."""
+        self.landing_frame.pack_forget()
+        self.tracker_frame.pack(fill=tk.BOTH, expand=True)
+        # Unbind global return so entry widgets handle Return properly
+        self.unbind("<Return>")
+        self.load_expenses()
+        self.update_summary_kpis()
+        self.refresh_payer_autocomplete()
+        self.ent_item.focus_set()
+
+    def on_ctrl_f(self):
+        """Focuses search bar, navigating to tracker page if on landing page."""
+        if not self.tracker_frame.winfo_ismapped():
+            self.show_tracker_page()
+        self.ent_search.focus_set()
+
     def build_ui(self):
-        """Constructs the complete application layout using pure pack at the root."""
+        """Constructs both the landing page and the tracker calculation dashboard."""
+        self.build_landing_page()
+        self.build_tracker_page()
+
+    def build_landing_page(self):
+        """Constructs the presentation-grade landing/welcome screen."""
+        container = tk.Frame(self.landing_frame, bg="#F8FAFC")
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # 1. Hero Card
+        hero = tk.Frame(container, bg="#0F172A", padx=20, pady=16)
+        hero.pack(fill=tk.X, padx=20, pady=(16, 10))
+
+        tk.Label(hero, text="🎓", font=("Segoe UI", 26), fg="#FFFFFF", bg="#0F172A").pack(anchor="center")
+        tk.Label(hero, text="Campus Expense & Split Tracker", font=("Segoe UI", 18, "bold"), fg="#FFFFFF", bg="#0F172A").pack(anchor="center", pady=(1, 2))
+        tk.Label(
+            hero,
+            text="Smart College Budgeting, Category Tracking & Optimal Debt Settlement",
+            font=("Segoe UI", 9),
+            fg="#94A3B8",
+            bg="#0F172A"
+        ).pack(anchor="center")
+
+        # 2. Three Value Proposition Cards
+        cards_container = tk.Frame(container, bg="#F8FAFC")
+        cards_container.pack(fill=tk.X, padx=20, pady=8)
+
+        feature_cards = [
+            ("📝", "Smart Expense Logging", "Log joint expenses with custom categories, payer names, and flexible split counts with instant validation.", "#2563EB", "#EFF6FF"),
+            ("📊", "Live Visual Dashboard", "Real-time KPI metrics for group spend, transaction counts, top category spend, and real-time search.", "#059669", "#F0FDF4"),
+            ("🤝", "Automated Settle-Up", "Exact integer paise mathematics and greedy Min-Cash-Flow algorithm to resolve all debts with minimal repayments.", "#7C3AED", "#F5F3FF")
+        ]
+
+        for idx, (icon, title, desc, col, bg_col) in enumerate(feature_cards):
+            c = tk.Frame(cards_container, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=12)
+            c.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0 if idx == 0 else 10, 0))
+
+            badge = tk.Frame(c, bg=bg_col, padx=8, pady=3)
+            badge.pack(anchor="w", pady=(0, 6))
+            tk.Label(badge, text=f"{icon}  {title}", font=("Segoe UI", 9, "bold"), fg=col, bg=bg_col).pack()
+
+            tk.Label(c, text=desc, font=("Segoe UI", 8), fg="#475569", bg="#FFFFFF", wraplength=220, justify="left").pack(anchor="w")
+
+        # 3. Call to Action (CTA)
+        cta_frame = tk.Frame(container, bg="#F8FAFC")
+        cta_frame.pack(pady=(18, 10))
+
+        start_btn = tk.Button(
+            cta_frame,
+            text="🚀 Open Expense Tracker",
+            font=("Segoe UI", 11, "bold"),
+            bg="#2563EB",
+            fg="#FFFFFF",
+            activebackground="#1D4ED8",
+            activeforeground="#FFFFFF",
+            relief="flat",
+            padx=24,
+            pady=9,
+            cursor="hand2",
+            command=self.show_tracker_page
+        )
+        start_btn.pack(pady=(2, 3))
+
+        tk.Label(cta_frame, text="Press Enter or click above to begin calculation", font=("Segoe UI", 8), fg="#64748B", bg="#F8FAFC").pack()
+
+        # 4. Footer Information
+        footer = tk.Frame(container, bg="#F8FAFC")
+        footer.pack(fill=tk.X, side=tk.BOTTOM, pady=10)
+        tk.Label(
+            footer,
+            text="● Local SQLite Database  •  High-DPI Projector Ready  •  Presentation Edition",
+            font=("Segoe UI", 8),
+            fg="#94A3B8",
+            bg="#F8FAFC"
+        ).pack(anchor="center")
+
+    def build_tracker_page(self):
+        """Builds the calculation, logging, and data dashboard inside tracker_frame."""
         # 1. Header Banner
-        self.build_header()
+        self.build_header(self.tracker_frame)
 
         # 2. KPI Summary Dashboard Cards
-        self.build_kpi_dashboard()
+        self.build_kpi_dashboard(self.tracker_frame)
 
         # 3. Main Body Frame (Input Form + Data Table with Filters)
-        body_frame = tk.Frame(self, bg="#F1F5F9", padx=12, pady=2)
+        body_frame = tk.Frame(self.tracker_frame, bg="#F1F5F9", padx=12, pady=2)
         body_frame.pack(fill=tk.BOTH, expand=True)
 
         # Input Form (LabelFrame)
@@ -867,11 +975,11 @@ class CampusExpenseApp(tk.Tk):
         self.build_data_table(body_frame)
 
         # 4. Action Bar (Bottom)
-        self.build_action_bar()
+        self.build_action_bar(self.tracker_frame)
 
-    def build_header(self):
-        """Creates presentation header bar with app branding."""
-        header_frame = tk.Frame(self, bg="#0F172A", padx=16, pady=10)
+    def build_header(self, parent):
+        """Creates presentation header bar with app branding and back-to-landing button."""
+        header_frame = tk.Frame(parent, bg="#0F172A", padx=16, pady=10)
         header_frame.pack(fill=tk.X)
 
         left_box = tk.Frame(header_frame, bg="#0F172A")
@@ -895,9 +1003,26 @@ class CampusExpenseApp(tk.Tk):
         )
         app_sub.pack(anchor="w", pady=(1, 0))
 
-    def build_kpi_dashboard(self):
+        # Navigation button back to Welcome Landing Page
+        btn_home = tk.Button(
+            header_frame,
+            text="🏠 Welcome Screen",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1E293B",
+            fg="#F1F5F9",
+            activebackground="#334155",
+            activeforeground="#FFFFFF",
+            relief="flat",
+            padx=10,
+            pady=3,
+            cursor="hand2",
+            command=self.show_landing_page
+        )
+        btn_home.pack(side=tk.RIGHT)
+
+    def build_kpi_dashboard(self, parent):
         """Builds 3 modern high-contrast KPI cards."""
-        dash_container = tk.Frame(self, bg="#F1F5F9", padx=12, pady=2)
+        dash_container = tk.Frame(parent, bg="#F1F5F9", padx=12, pady=2)
         dash_container.pack(fill=tk.X, pady=(4, 2))
 
         # Card 1: Total Group Spend
@@ -1055,9 +1180,9 @@ class CampusExpenseApp(tk.Tk):
         self.tree.bind("<Delete>", lambda e: self.on_delete_selected())
         self.tree.bind("<Double-1>", lambda e: self.on_row_double_click(e))
 
-    def build_action_bar(self):
+    def build_action_bar(self, parent):
         """Constructs bottom action bar with Delete, CSV Export, and Settle Up buttons."""
-        bar = tk.Frame(self, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=8)
+        bar = tk.Frame(parent, bg="#FFFFFF", bd=1, relief="solid", padx=14, pady=8)
         bar.pack(fill=tk.X, side=tk.BOTTOM)
 
         # Left: Live status label

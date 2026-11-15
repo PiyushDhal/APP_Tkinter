@@ -6,6 +6,7 @@ A presentation-ready, high-contrast desktop application built in Python using **
 
 ## 🌟 Key Presentation Features
 
+- **Presentation Landing / Welcome Page:** Launches with an elegant welcome screen highlighting key features, capabilities, and quick guidance. Features a large, high-contrast **"🚀 Open Expense Tracker"** button (or press `Enter`) to smoothly transition into the main expense calculator dashboard, and a **"🏠 Welcome Screen"** header button to return at any time.
 - **Self-Contained & Zero Setup:** Runs out of the box on standard Python 3.x installations without external dependencies or cloud databases. SQLite database (`campus_expenses.db`) is automatically created and initialized locally.
 - **Zero-Data & Dynamic Roster:** Starts completely clean with zero initial records and no pre-set student names. The database, live dashboard KPIs, table, and student dropdown dynamically grow and recalculate in real time as the user inputs names and logs expenses.
 - **Presentation-Grade Modern UI:**
@@ -101,18 +102,27 @@ The settlement window computes fair balances across group members using exact in
 
 ## 🎤 Classroom Presentation Demo Walkthrough
 
-1. **Initial Screen:** Show the auto-seeded demo records (Total Group Spend = ₹ 1,200.00, 4 Records, Top Category = Food).
-2. **Real-time Filter & Search:**
-   - Type `"Uber"` in the search bar to demonstrate instant real-time table filtering.
-   - Select `"Food"` from the Category dropdown to show category-specific expenses.
-   - Click **"Reset"** to restore all records.
-3. **Add New Expense:**
-   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `₹ 120.00`, Paid By: `Rohan`, Split: `2`.
-   - Show how the KPI summary cards instantly update, table row striping adjusts, the status bar gives immediate feedback, and `"Rohan"` is dynamically added to the Paid By autocomplete dropdown for future entries.
-4. **Column Sorting:** Click on `Total (₹)` or `Each Owes (₹)` to demonstrate ascending/descending sorting.
-5. **Settle Up Modal:**
+1. **Presentation Landing Page:**
+   - Launch `python main.py` to reveal the presentation welcome screen with hero branding, feature capability badges, and keyboard shortcuts.
+   - Click **"🚀 Open Expense Tracker"** (or simply press `Enter`) to smoothly transition into the main expense calculator dashboard.
+2. **Clean Zero-Data Start:**
+   - Show that the tracker starts at clean zero: `₹ 0.00` Total Spend, `0 Records`, `N/A` Top Category, and an empty Paid By dropdown.
+3. **Add Initial Expenses Dynamically:**
+   - Add `"Physics Lab Manual"`, Category: `Stationery`, Amount: `120`, Paid By: `Piyush`, Split: `2`.
+   - Add `"College Canteen Lunch"`, Category: `Food`, Amount: `450`, Paid By: `Manan`, Split: `3`.
+   - Add `"Campus Shuttle Fare"`, Category: `Travel`, Amount: `90`, Paid By: `Yukti`, Split: `3`.
+   - Notice how KPI summary cards instantly update, table rows dynamically stripe, and `"Piyush"`, `"Manan"`, and `"Yukti"` automatically populate the Paid By auto-suggest dropdown for subsequent inputs.
+4. **Real-time Filter & Search:**
+   - Type `"Canteen"` in the search bar to demonstrate instant real-time table filtering across items and payers.
+   - Select `"Food"` from the Category dropdown to isolate category-specific spending.
+   - Click **"Reset"** (or press `Escape`) to restore all records.
+5. **Column Sorting:** Click on `Total (₹)` or `Each Owes (₹)` headers to demonstrate ascending/descending numeric sort.
+6. **Settle Up Modal:**
    - Click **"🤝 Settle Up Summary"** (or press `Ctrl+S`).
    - Highlight the individual breakdown table (shows who paid what and their fair share).
-   - Point out the step-by-step **"Who Owes Whom"** plan.
+   - Point out the step-by-step **"Who Owes Whom"** plan calculated via integer paise arithmetic.
    - Click **"Copy Settlement to Clipboard"** to show real-world utility for messaging apps.
-6. **CSV Export:** Click **"📥 Export to CSV"** to generate `expenses_report.csv` on disk.
+7. **CSV Export & Navigation:**
+   - Click **"📥 Export to CSV"** to generate `expenses_report.csv` on disk.
+   - Click **"🏠 Welcome Screen"** in the top navigation bar to return to the presentation landing page.
+   - If desired for a fresh demo run, click **"🧹 Erase All Data"** to reset the SQLite database back to zero.

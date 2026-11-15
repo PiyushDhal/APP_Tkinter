@@ -41,13 +41,24 @@ def run_all_tests():
     print("✓ Application starts completely clean with zero records and zero pre-set names.")
 
     # --------------------------------------------------------------------------
-    # 2. INPUT VALIDATION & NUMERIC EDGE CASES
+    # 2. LANDING PAGE & NAVIGATION TO TRACKER
     # --------------------------------------------------------------------------
-    print("\n[2/6] Testing Input Validation Guards at Zero State...")
+    print("\n[2/6] Testing Landing Page & Page Transitions...")
     app = main.CampusExpenseApp()
     app.db = db
+    app.update()
+
+    # Verify landing page is active on launch
+    assert app.landing_frame.winfo_ismapped() == 1, "Landing page should be visible on startup!"
+    assert app.tracker_frame.winfo_ismapped() == 0, "Tracker page should be hidden on startup!"
+
+    # Switch to tracker page
+    app.show_tracker_page()
     app.refresh_payer_autocomplete()
     app.update()
+
+    assert app.landing_frame.winfo_ismapped() == 0, "Landing page should be hidden after transition!"
+    assert app.tracker_frame.winfo_ismapped() == 1, "Tracker page should be visible after transition!"
 
     assert app.kpi_spend_val.cget("text") == "₹ 0.00"
     assert app.kpi_tx_val.cget("text") == "0 Records"
@@ -55,6 +66,12 @@ def run_all_tests():
     assert len(app.tree.get_children()) == 0
     assert len(app.combo_paid_by["values"]) == 0, "Dropdown should have 0 names initially!"
     assert app.combo_paid_by.get() == "", "Paid By field should be initially empty!"
+    print("✓ Landing page and transition to tracker page verified.")
+
+    # --------------------------------------------------------------------------
+    # 3. INPUT VALIDATION & NUMERIC EDGE CASES
+    # --------------------------------------------------------------------------
+    print("\n[3/6] Testing Input Validation Guards at Zero State...")
 
     # Test blank item
     app.ent_item.delete(0, "end")
@@ -113,9 +130,9 @@ def run_all_tests():
     print("✓ All input validation guards verified at zero state.")
 
     # --------------------------------------------------------------------------
-    # 3. DYNAMIC UPDATING AS USER GIVES INPUT
+    # 4. DYNAMIC UPDATING AS USER GIVES INPUT
     # --------------------------------------------------------------------------
-    print("\n[3/6] Testing Dynamic Storage and Dropdown Growth as User Inputs Names...")
+    print("\n[4/7] Testing Dynamic Storage and Dropdown Growth as User Inputs Names...")
 
     # Input 1: User types "Alex", Food, ₹ 400
     app.ent_item.delete(0, "end")
@@ -155,9 +172,9 @@ def run_all_tests():
     print("✓ Dynamic storage and dropdown autocomplete populated purely from user input.")
 
     # --------------------------------------------------------------------------
-    # 4. SETTLEMENT COMPUTATION FOR DYNAMIC DATA
+    # 5. SETTLEMENT COMPUTATION FOR DYNAMIC DATA
     # --------------------------------------------------------------------------
-    print("\n[4/6] Verifying Settle-Up Calculations for User Input Data...")
+    print("\n[5/7] Verifying Settle-Up Calculations for User Input Data...")
     summary, txs, total_spend = db.get_settlement_data()
     assert total_spend == 600.00
     assert summary["Alex"]["paid"] == 400.00
@@ -175,9 +192,9 @@ def run_all_tests():
     print("✓ Settle-up modal mathematically resolves debts accurately.")
 
     # --------------------------------------------------------------------------
-    # 5. FILTERING, SEARCH, CSV EXPORT & DELETION
+    # 6. FILTERING, SEARCH, CSV EXPORT & DELETION
     # --------------------------------------------------------------------------
-    print("\n[5/6] Testing Real-Time Search, Filter, CSV Export & Deletion...")
+    print("\n[6/7] Testing Real-Time Search, Filter, CSV Export & Deletion...")
     app.search_var.set("Cab")
     app.load_expenses()
     assert len(app.tree.get_children()) == 1
@@ -198,9 +215,9 @@ def run_all_tests():
     print("✓ Filter, search, CSV export, and deletion verified.")
 
     # --------------------------------------------------------------------------
-    # 6. GEOMETRY CONSTRAINTS
+    # 7. GEOMETRY CONSTRAINTS
     # --------------------------------------------------------------------------
-    print("\n[6/6] Verifying Geometry & Projector Resolution Scaling...")
+    print("\n[7/7] Verifying Geometry & Projector Resolution Scaling...")
     app.geometry("1000x650")
     app.update_idletasks()
     assert app.minsize() == (850, 550)
